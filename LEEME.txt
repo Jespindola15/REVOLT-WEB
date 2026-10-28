@@ -5,10 +5,14 @@ Una versión para el navegador de Re-Volt, hecha con los modelos, texturas y
 parámetros originales del juego. Se juega en Chrome, solo o online con amigos
 (hasta 8 por sala).
 
-Pistas (3):
+Pistas (7):
   - Toys in the Hood 1
   - Toy World 1 (la juguetería)
-  - Casino RV
+  - Casino RV (con la ruleta que gira)
+  - Supermercado
+  - Museo 1
+  - Toytanic 1 (el barco)
+  - Jardín Botánico
 
 Autos (20):
   - Clásicos: RC Bandit, Col. Moss, Adeon, AMW, Volken Turbo, Dust Mite,
@@ -64,6 +68,10 @@ CÓMO JUGAR ONLINE
 - Los demás escriben ese código y tocan "Unirme".
 - Cada uno elige su auto; el que creó la sala elige la pista y las vueltas
   (1, 3 o 5) y toca "Empezar carrera".
+- Si el que creó la sala se va (o se le corta), la sala NO se cierra: el
+  siguiente jugador pasa a ser el anfitrión con el mismo código y los demás
+  se reconectan solos en unos segundos. La carrera sigue.
+- Si a alguien se le corta internet un momento, vuelve a entrar solo.
 - La conexión es directa entre los navegadores (WebRTC). Si alguien no puede
   conectarse, suele ser por la red (algunas redes de celular o de empresa lo
   bloquean). Probá con otro wifi.

@@ -725,7 +725,11 @@ function renderCars() {
       audio.play('menuupdown', { vol: 0.5 });
       [...el.querySelectorAll('.car')].forEach(c => c.setAttribute('aria-pressed', c === b));
       spawnMyCar(0);
-      if (net?.active && !net.isHost) net.send({ t: 'car', car: def.id });
+      if (net) {
+        net.setCar(def.id);
+        if (net.active && !net.isHost) net.send({ t: 'car', car: def.id });
+        else if (net.active && net.isHost) { const me = net.players.get('host'); if (me) { me.car = def.id; net._roster(); } }
+      }
     };
     el.appendChild(b);
   }
@@ -791,13 +795,17 @@ $('code').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-join'
 function enterLobby(code) {
   G.mode = 'lobby';
   $('lobby-code').textContent = code;
+  refreshLobbyUI();
+  spawnMyCar(lobbySlot());
+  show('scr-lobby');
+}
+// botones de la sala según si sos el anfitrión (cambia si el anfitrión se va y quedás vos)
+function refreshLobbyUI() {
   $('btn-start').hidden = !net.isHost; $('lap-field').hidden = !net.isHost; $('lobby-wait').hidden = net.isHost;
   $('lobby-track-field').hidden = !net.isHost; $('lobby-track-name').hidden = net.isHost;
   renderTrackButtons($('lobby-tracksel'));
   updateLobbyTrack();
   $('lobby-sub').textContent = net.isHost ? 'PASALE ESTE CÓDIGO A TUS AMIGOS' : 'CONECTADO A LA SALA';
-  spawnMyCar(lobbySlot());
-  show('scr-lobby');
 }
 
 $('lapsel').addEventListener('click', e => {
@@ -812,9 +820,9 @@ $('btn-start').onclick = () => {
   startRace(laps, grid, G.trackId);
 };
 $('btn-leave').onclick = () => { net?.close(); net = null; clearRemotes(); G.online = false; toMenu(); };
-$('btn-res-back').onclick = () => { if (G.online && net?.active) { G.mode = 'lobby'; spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu(); };
+$('btn-res-back').onclick = () => { if (G.online && net?.active) { G.mode = 'lobby'; refreshLobbyUI(); spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu(); };
 $('btn-quit').onclick = () => {
-  if (G.online && net?.active) { G.mode = 'lobby'; weapons.clearAll(); clearGhost(); spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu();
+  if (G.online && net?.active) { G.mode = 'lobby'; weapons.clearAll(); clearGhost(); refreshLobbyUI(); spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu();
 };
 
 // lugar en la grilla según el orden de la sala (así en la sala nadie aparece encima de otro)
@@ -904,7 +912,16 @@ const netHandlers = {
     }
     else if (d.t === 'finish') { addResult({ id: d.id, name: d.name, time: d.time }); if (G.mode === 'race') toast(d.name + ' llegó: ' + fmt(d.time)); }
     else if (d.t === 'gone') { dropRemote(d.id); }
-    else if (d.t === 'hostgone') { clearRemotes(); G.online = false; toMenu(); $('menu-status').textContent = 'El anfitrión cerró la sala.'; }
+    else if (d.t === 'hostgone') { clearRemotes(); G.online = false; toMenu(); $('menu-status').textContent = 'Se cortó la sala y no se pudo recuperar.'; }
+    else if (d.t === 'reconnecting') { toast('Se cortó la conexión. Reconectando…'); $('lobby-status').textContent = 'Reconectando…'; }
+    else if (d.t === 'reconnected') { toast('¡Reconectado!'); $('lobby-status').textContent = ''; }
+    else if (d.t === 'becamehost') {
+      // el anfitrión se fue y ahora la sala es tuya (mismo código): sacar su auto viejo
+      dropRemote('host');
+      toast('El anfitrión se fue: ahora sos vos el anfitrión');
+      $('lobby-status').textContent = '';
+      if (G.mode === 'lobby') refreshLobbyUI();
+    }
     else if (d.t === 'full') { $('menu-status').textContent = 'La sala está llena (máximo 8).'; }
   },
 };
@@ -1342,7 +1359,8 @@ async function boot() {
       }
       return now;
     };
-    window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate, audio, weapons, THREE, gridSlot, startBotRace, botProgress, TUNE, records, BotDriver, botNav };
+    window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate, audio, weapons, THREE, gridSlot, startBotRace, botProgress, TUNE, records, BotDriver, botNav,
+      netIsHost: () => !!net?.isHost, netDrop: () => { try { net.hostConn?.close(); } catch (e) {} } };
   } catch (e) {
     console.error(e);
     $('loadmsg').textContent = 'No se pudo cargar: ' + e.message + '. Si abriste el archivo con doble clic, tiene que estar subido a una página web (ver LEEME).';
