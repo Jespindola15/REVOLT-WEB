@@ -105,52 +105,68 @@
    9
   ],
   "instances": {
-   "hoop": {
-    "prm": "hoop.prm",
+   "barrierp": {
+    "prm": "barrierpole.prm",
+    "solid": true
+   },
+   "lampost": {
+    "prm": "lampost.prm",
+    "solid": true
+   },
+   "start": {
+    "prm": "start.prm",
     "solid": false
    },
-   "tree2": {
-    "prm": "tree2.prm",
+   "whitepos": {
+    "prm": "whitepost.prm",
     "solid": true
    },
    "seat1": {
     "prm": "seat1.prm",
     "solid": false
    },
-   "steer": {
-    "prm": "steer.prm",
+   "house1": {
+    "prm": "house1.prm",
     "solid": false
-   },
-   "startrev": {
-    "prm": "startrev.prm",
-    "solid": false
-   },
-   "bmw": {
-    "prm": "bmw.prm",
-    "solid": true
-   },
-   "ramp1": {
-    "prm": "ramp1.prm",
-    "solid": true
-   },
-   "tree1": {
-    "prm": "tree1.prm",
-    "solid": false
-   },
-   "start": {
-    "prm": "start.prm",
-    "solid": false
-   },
-   "barrierp": {
-    "prm": "barrierpole.prm",
-    "solid": true
    },
    "seat2": {
     "prm": "seat2.prm",
     "solid": false
    },
-   "whitepos": {
-    "prm": "whitepost.prm",
+   "barrier": {
+    "prm": "barrier.prm",
+    "solid": true
+   },
+   "steer": {
+    "prm": "steer.prm",
+    "solid": false
+   },
+   "ramp1": {
+    "prm": "ramp1.prm",
+    "solid": true
+   },
+   "bin": {
+    "prm": "bin.prm",
+    "solid": true
+   },
+   "house2": {
+    "prm": "house2.prm",
+    "solid": false
+   },
+   "bmw2": {
+    "prm": "bmw2.prm",
+    "solid": true
+   },
+   "startrev": {
+    "prm": "startrev.prm",
+    "solid": false
+   },
+   "tree1": {
+    "prm": "tree1.prm",
+    "solid": false
+   },
+   "bmw": {
+    "prm": "bmw.prm",
     "solid": true
    },
    "ramp3": {
@@ -161,34 +177,26 @@
     "prm": "carbase.prm",
     "solid": true
    },
-   "lampost": {
-    "prm": "lampost.prm",
-    "solid": true
-   },
-   "house1": {
-    "prm": "house1.prm",
-    "solid": false
-   },
-   "bmw2": {
-    "prm": "bmw2.prm",
-    "solid": true
-   },
-   "bin": {
-    "prm": "bin.prm",
-    "solid": true
-   },
-   "barrier": {
-    "prm": "barrier.prm",
-    "solid": true
-   },
-   "house2": {
-    "prm": "house2.prm",
+   "hoop": {
+    "prm": "hoop.prm",
     "solid": false
    },
    "skate": {
     "prm": "skate.prm",
     "solid": true
+   },
+   "tree2": {
+    "prm": "tree2.prm",
+    "solid": true
    }
+  },
+  "sky": {
+   "ft": "sky_ft.png",
+   "bk": "sky_bk.png",
+   "lt": "sky_lt.png",
+   "rt": "sky_rt.png",
+   "tp": "sky_tp.png",
+   "bt": "sky_bt.png"
   }
  }
 }

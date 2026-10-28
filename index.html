@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Re-Volt Barrio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Chakra+Petch:wght@400;600;700&display=swap">
+<style>
+/* Concepto: caja de juguete RC — paneles azul tinta con borde amarillo eléctrico sobre la pista en vivo. Un solo tema oscuro a propósito. */
+:root {
+  --ink: #12162b;
+  --ink-2: #1c2242;
+  --ink-3: #2a3260;
+  --volt: #ffd23f;
+  --coral: #ff5a36;
+  --paper: #f3f5fa;
+  --muted: #a9b0cf;
+  --good: #4ade80;
+  --display: 'Bungee', 'Impact', 'Arial Black', sans-serif;
+  --body: 'Chakra Petch', 'Segoe UI', system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; background: var(--ink); color: var(--paper); font-family: var(--body); overflow: hidden; }
+canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+button, input { font-family: var(--body); }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--volt); outline-offset: 2px; }
+
+.screen { position: fixed; inset: 0; display: flex; align-items: stretch; pointer-events: none;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.panel { pointer-events: auto; background: color-mix(in srgb, var(--ink) 92%, transparent); border: 3px solid var(--volt);
+  border-radius: 6px; box-shadow: 8px 8px 0 rgba(0,0,0,.45); width: min(440px, 100%); max-height: 100%; overflow-y: auto;
+  padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
+.logo { font-family: var(--display); font-size: clamp(30px, 6vw, 44px); line-height: .95; color: var(--volt); margin: 0;
+  text-shadow: 3px 3px 0 var(--coral); letter-spacing: .5px; text-wrap: balance; }
+.logo small { display: block; font-size: .42em; color: var(--paper); text-shadow: none; letter-spacing: 3px; margin-top: 6px; }
+.label { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); font-weight: 600; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+input[type=text] { background: var(--ink-2); border: 2px solid var(--ink-3); color: var(--paper); padding: 10px 12px; font-size: 16px; border-radius: 4px; }
+input[type=text]:focus { border-color: var(--volt); outline: none; }
+
+.cars { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.car { background: var(--ink-2); border: 2px solid var(--ink-3); color: var(--paper); border-radius: 4px; padding: 8px 10px; text-align: left; display: flex; flex-direction: column; gap: 6px; }
+.car[aria-pressed=true] { border-color: var(--volt); background: var(--ink-3); }
+.car b { font-size: 15px; }
+.bars { display: grid; grid-template-columns: 34px 1fr; gap: 3px 6px; align-items: center; font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+.bar { height: 5px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--volt); }
+
+.btn { font-family: var(--display); font-size: 17px; letter-spacing: .5px; border: 0; border-radius: 4px; padding: 12px 14px; background: var(--volt); color: var(--ink); box-shadow: 4px 4px 0 var(--coral); }
+.btn:active { transform: translate(2px,2px); box-shadow: 2px 2px 0 var(--coral); }
+.btn.ghost { background: transparent; color: var(--paper); border: 2px solid var(--ink-3); box-shadow: none; }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row > * { flex: 1 1 auto; }
+.join { display: flex; gap: 8px; }
+.join input { flex: 1 1 auto; min-width: 0; text-transform: uppercase; letter-spacing: 4px; font-weight: 700; }
+.hint { font-size: 13px; color: var(--muted); line-height: 1.45; margin: 0; }
+.status { font-size: 13px; color: var(--coral); min-height: 1.2em; margin: 0; }
+
+.code { font-family: var(--display); font-size: 48px; color: var(--volt); letter-spacing: 6px; text-align: center; background: var(--ink-2); border-radius: 4px; padding: 6px 0; user-select: all; }
+.players { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.players li { display: flex; justify-content: space-between; gap: 8px; background: var(--ink-2); padding: 8px 10px; border-radius: 4px; font-size: 15px; }
+.players li span:last-child { color: var(--muted); }
+.lapsel { display: flex; gap: 6px; }
+.lapsel button { flex: 1; background: var(--ink-2); color: var(--paper); border: 2px solid var(--ink-3); border-radius: 4px; padding: 8px; font-weight: 700; font-size: 15px; }
+.lapsel button[aria-pressed=true] { border-color: var(--volt); color: var(--volt); }
+
+/* HUD */
+#hud { position: fixed; inset: 0; pointer-events: none; font-variant-numeric: tabular-nums; }
+.hud-tl { position: absolute; top: max(14px, env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 4px; }
+.hud-tr { position: absolute; top: max(14px, env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); text-align: right; display: flex; flex-direction: column; gap: 4px; }
+.hud-big { font-family: var(--display); font-size: 34px; color: var(--volt); text-shadow: 3px 3px 0 rgba(0,0,0,.6); }
+.hud-small { font-size: 15px; font-weight: 700; text-shadow: 2px 2px 0 rgba(0,0,0,.7); }
+.hud-small em { font-style: normal; color: var(--muted); font-weight: 600; letter-spacing: 1px; font-size: 12px; margin-right: 6px; }
+.speedo { position: absolute; right: max(18px, env(safe-area-inset-right, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); text-align: right; }
+.speedo b { font-family: var(--display); font-size: 46px; color: var(--paper); text-shadow: 3px 3px 0 rgba(0,0,0,.6); }
+.speedo span { display: block; font-size: 12px; letter-spacing: 2px; color: var(--muted); }
+.center-msg { position: absolute; left: 0; right: 0; top: 34%; text-align: center; font-family: var(--display); font-size: clamp(48px, 12vw, 120px); color: var(--volt); text-shadow: 5px 5px 0 var(--coral); }
+.toast { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); font-weight: 700; font-size: 18px; background: rgba(18,22,43,.85); border: 2px solid var(--volt); padding: 6px 14px; border-radius: 4px; white-space: nowrap; }
+.keys { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); font-size: 12px; color: var(--muted); line-height: 1.6; text-shadow: 1px 1px 0 #000; }
+.keys kbd { font-family: var(--body); font-weight: 700; color: var(--paper); background: rgba(18,22,43,.8); border: 1px solid var(--ink-3); border-radius: 3px; padding: 0 5px; }
+.menu-btn { pointer-events: auto; position: absolute; top: max(14px, env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); background: rgba(18,22,43,.85); color: var(--paper); border: 2px solid var(--ink-3); border-radius: 4px; padding: 6px 12px; font-weight: 700; }
+
+.results { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.results td, .results th { padding: 6px 4px; text-align: left; border-bottom: 1px solid var(--ink-3); font-size: 15px; }
+.results th { font-size: 11px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; }
+.results td:last-child, .results th:last-child { text-align: right; }
+
+#loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--ink); z-index: 50; font-family: var(--display); color: var(--volt); font-size: 22px; text-align: center; padding: 16px; }
+#loading p { font-family: var(--body); color: var(--muted); font-size: 14px; }
+
+/* controles táctiles */
+#touch { position: fixed; inset: auto 0 0 0; display: flex; justify-content: space-between; padding: 0 max(16px, env(safe-area-inset-right, 0px)) max(20px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); pointer-events: none; }
+#touch .grp { display: flex; gap: 12px; pointer-events: auto; }
+#touch button { width: 74px; height: 74px; border-radius: 50%; border: 3px solid var(--volt); background: rgba(18,22,43,.6); color: var(--volt); font-family: var(--display); font-size: 22px; touch-action: none; user-select: none; -webkit-user-select: none; }
+#touch button.on { background: var(--volt); color: var(--ink); }
+
+@media (max-width: 640px) {
+  .screen { align-items: flex-end; }
+  .panel { max-height: 78%; }
+  .keys { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .btn:active { transform: none; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+  "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.8/build/index.module.js"
+} }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="loading">
+  <div>CARGANDO EL BARRIO…<p id="loadmsg">Pista y autos</p></div>
+</div>
+
+<!-- MENÚ PRINCIPAL -->
+<section class="screen" id="scr-menu" hidden>
+  <div class="panel">
+    <h1 class="logo">RE-VOLT<small>TOYS IN THE HOOD · WEB</small></h1>
+    <div class="field">
+      <label class="label" for="name">Tu nombre</label>
+      <input type="text" id="name" maxlength="16" autocomplete="off" placeholder="Piloto">
+    </div>
+    <div class="field">
+      <span class="label">Elegí tu auto</span>
+      <div class="cars" id="cars"></div>
+    </div>
+    <button class="btn" id="btn-practice">Práctica solo</button>
+    <div class="field">
+      <span class="label">Online con amigos</span>
+      <button class="btn ghost" id="btn-host">Crear sala</button>
+      <div class="join">
+        <input type="text" id="code" maxlength="5" placeholder="CÓDIGO" autocomplete="off" aria-label="Código de sala">
+        <button class="btn ghost" id="btn-join">Unirme</button>
+      </div>
+    </div>
+    <p class="status" id="menu-status"></p>
+  </div>
+</section>
+
+<!-- SALA -->
+<section class="screen" id="scr-lobby" hidden>
+  <div class="panel">
+    <h2 class="logo" style="font-size:28px">SALA<small id="lobby-sub">PASALE ESTE CÓDIGO A TUS AMIGOS</small></h2>
+    <div class="code" id="lobby-code">-----</div>
+    <div class="field">
+      <span class="label">Pilotos</span>
+      <ul class="players" id="lobby-players"></ul>
+    </div>
+    <div class="field" id="lap-field">
+      <span class="label">Vueltas</span>
+      <div class="lapsel" id="lapsel">
+        <button type="button" data-l="1">1</button><button type="button" data-l="3" aria-pressed="true">3</button><button type="button" data-l="5">5</button>
+      </div>
+    </div>
+    <button class="btn" id="btn-start">Empezar carrera</button>
+    <p class="hint" id="lobby-wait" hidden>Esperando que el anfitrión arranque la carrera…</p>
+    <button class="btn ghost" id="btn-leave">Salir de la sala</button>
+    <p class="status" id="lobby-status"></p>
+  </div>
+</section>
+
+<!-- RESULTADOS -->
+<section class="screen" id="scr-results" hidden>
+  <div class="panel">
+    <h2 class="logo" style="font-size:28px">RESULTADOS</h2>
+    <table class="results"><thead><tr><th>#</th><th>Piloto</th><th>Tiempo</th></tr></thead><tbody id="res-body"></tbody></table>
+    <button class="btn" id="btn-res-back">Volver a la sala</button>
+  </div>
+</section>
+
+<div id="hud" hidden>
+  <div class="hud-tl">
+    <div class="hud-big" id="h-lap">VUELTA 1/3</div>
+    <div class="hud-small"><em>TIEMPO</em><span id="h-time">0:00.00</span></div>
+    <div class="hud-small"><em>MEJOR</em><span id="h-best">--</span></div>
+  </div>
+  <div class="hud-tr">
+    <div class="hud-big" id="h-pos"></div>
+    <div class="hud-small" id="h-others"></div>
+  </div>
+  <button class="menu-btn" id="btn-quit">Menú</button>
+  <div class="center-msg" id="h-center" hidden></div>
+  <div class="toast" id="h-toast" hidden></div>
+  <div class="speedo"><b id="h-speed">0</b><span>KM/H</span></div>
+  <div class="keys">
+    <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> o <kbd>WASD</kbd> manejar · <kbd>Espacio</kbd> freno de mano<br>
+    <kbd>R</kbd> reaparecer · <kbd>C</kbd> cámara · <kbd>M</kbd> sonido · también joystick
+  </div>
+</div>
+
+<div id="touch" hidden>
+  <div class="grp"><button data-k="left" aria-label="Izquierda">◀</button><button data-k="right" aria-label="Derecha">▶</button></div>
+  <div class="grp"><button data-k="back" aria-label="Freno">▼</button><button data-k="gas" aria-label="Acelerar">▲</button></div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

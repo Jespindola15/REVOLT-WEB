@@ -1,0 +1,65 @@
+RE-VOLT · TOYS IN THE HOOD · VERSIÓN WEB
+=========================================
+
+Una versión para el navegador de Re-Volt, hecha con los modelos, texturas y
+parámetros originales del juego: la pista "Toys in the Hood 1" y 8 autos
+(RC Bandit, Col. Moss, Adeon, AMW, Volken Turbo, Dust Mite, Panga y RC San).
+Se juega en Chrome, solo o online con amigos (hasta 8 por sala).
+
+
+CÓMO SUBIRLO PARA JUGAR CON TUS AMIGOS (5 minutos, gratis)
+----------------------------------------------------------
+El juego tiene que estar en una página web: si abrís index.html con doble
+clic, el navegador no lo deja cargar los archivos.
+
+1. Descomprimí el .zip. Te queda la carpeta "revolt-web".
+2. Entrá a https://app.netlify.com/drop
+3. Arrastrá la carpeta "revolt-web" entera al recuadro de la página.
+4. Netlify te da un link que termina en ".netlify.app".
+5. Creá una cuenta gratis en Netlify y "reclamá" el sitio (te lo ofrece ahí
+   mismo). Sin cuenta, el link queda con una contraseña temporal.
+6. Si tu cuenta deja los sitios privados por defecto, en la configuración del
+   sitio buscá "Visibility" y ponelo público, así tus amigos pueden entrar.
+7. Pasales el link a tus amigos.
+
+
+CÓMO JUGAR ONLINE
+-----------------
+- Uno toca "Crear sala" y le aparece un código de 5 letras.
+- Los demás escriben ese código y tocan "Unirme".
+- Cada uno elige su auto; el que creó la sala elige las vueltas (1, 3 o 5) y
+  toca "Empezar carrera".
+- La conexión es directa entre los navegadores (WebRTC). Si alguien no puede
+  conectarse, suele ser por la red (algunas redes de celular o de empresa lo
+  bloquean). Probá con otro wifi.
+
+
+CONTROLES
+---------
+Flechas o WASD ........ manejar
+Espacio ............... freno de mano
+R ..................... reaparecer (si quedás trabado o dado vuelta)
+C ..................... cambiar cámara (cerca / lejos / paragolpes)
+M ..................... prender o apagar el sonido del motor
+Esc ................... volver al menú
+Joystick .............. RT acelera, LT frena, palanca izquierda dobla,
+                        A o RB freno de mano, Y reaparece
+En celular aparecen botones en pantalla.
+
+
+QUÉ ES IGUAL Y QUÉ NO AL ORIGINAL
+---------------------------------
+Igual: la pista, los objetos (casas, árboles, autos estacionados, rampas),
+el cielo, las texturas de todo, los modelos de los autos y sus parámetros
+(velocidad, aceleración, peso, suspensión, agarre).
+
+Distinto: la física del manejo está hecha de nuevo a partir de esos
+parámetros, porque la física original de Re-Volt no es pública. Se siente
+parecida pero no idéntica. Tampoco tiene armas, rivales de la computadora,
+música ni reflejos cromados.
+
+
+PROBARLO EN TU PC SIN SUBIRLO
+-----------------------------
+Si tenés Python instalado: abrí una terminal en la carpeta "revolt-web",
+ejecutá   python -m http.server 8000   y entrá a http://localhost:8000
