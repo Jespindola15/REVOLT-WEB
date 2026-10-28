@@ -193,6 +193,15 @@ export class Weapons {
     }
     this.parts = keep;
   }
+  // chispas de un choque (contra la pista o contra otro auto)
+  sparks(pos, strength = 1) {
+    if (!this.ready) return;
+    const n = Math.round(3 + strength * 9);
+    for (let k = 0; k < n; k++) {
+      const v = new THREE.Vector3((Math.random() - 0.5) * 900, 150 + Math.random() * 600, (Math.random() - 0.5) * 900).multiplyScalar(0.5 + strength * 0.6);
+      this.part(CELL.spark, pos, { vel: v, grav: 2600, life: 0.25 + Math.random() * 0.3, size: 14 + strength * 10, size1: 3, color: k % 3 ? 0xffc060 : 0xfff0c0 });
+    }
+  }
   explosion(pos, size = 1) {
     this.part(null, pos, { frames: BOOM, life: 0.7, size: 200 * size, size1: 330 * size, additive: true });
     this.part(CELL.flare, pos, { life: 0.25, size: 420 * size, size1: 200 * size, color: 0xffe0a0 });

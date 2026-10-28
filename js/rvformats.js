@@ -141,6 +141,7 @@ export function parseCarParams(text) {
       steerRatio: num(w, 'SteerRatio', 0), radius: num(w, 'Radius', 10), maxPos: num(w, 'MaxPos', 8),
       grip: num(w, 'Grip', 0.015), staticFriction: num(w, 'StaticFriction', 1.5), kineticFriction: num(w, 'KineticFriction', 1.4),
       axleFriction: num(w, 'AxleFriction', 0.02),
+      modelNum: num(w, 'ModelNum', i + 1), // qué modelo usa la rueda (algunos autos usan el mismo para las dos de cada lado)
     });
   }
   const springs = [];

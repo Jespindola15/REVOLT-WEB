@@ -77,6 +77,7 @@ export class CarPhysics {
     this.speed = 0; this.fwdSpeed = 0;
     // para el sonido: cuánto derrapa (0..1) y qué tan fuerte fue el último golpe contra la pista
     this.skid = 0; this.impact = 0; this._skidAcc = 0; this._impactAcc = 0;
+    this.impactPt = new THREE.Vector3(); this.hitPt = new THREE.Vector3(); // dónde fue el último golpe (para las chispas)
     // efectos de armas y bonus (segundos que les quedan): turbo, aceite (sin agarre), electrocutado (sin motor)
     this.fx = { turbo: 0, oil: 0, zap: 0 };
   }
@@ -334,7 +335,7 @@ export class CarPhysics {
         const rxn = new THREE.Vector3().crossVectors(rr, n);
         const k = 1 / this.mass + n.dot(new THREE.Vector3().crossVectors(this.invIWorld(rxn, new THREE.Vector3()), rr));
         const j = -(1 + 0.15) * vn / k;
-        this._impactAcc = Math.max(this._impactAcc, -vn);
+        if (-vn > this._impactAcc) { this._impactAcc = -vn; this.impactPt.copy(cp); this.impactWall = Math.abs(n.y) < 0.5; }
         const imp = n.clone().multiplyScalar(j);
         const vt = vRel.clone().addScaledVector(n, -vn);
         const vtl = vt.length();
@@ -381,6 +382,7 @@ export class CarPhysics {
           const vt = vRel.clone().addScaledVector(n, -vn); const vtl = vt.length();
           if (vtl > 1e-3) imp.addScaledVector(vt, -Math.min(vtl / k * 0.3, 0.25 * j) / vtl);
           this.applyImpulse(contact, imp);
+          if (-vn > (hit || 0)) this.hitPt.copy(contact);
           hit = Math.max(hit || 0, -vn);
         }
       }

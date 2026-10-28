@@ -8,6 +8,7 @@ import { GameAudio } from './audio.js';
 import { TrackCollider, Spinner } from './world.js';
 import { BotDriver, AiPath, DIFFICULTY, TUNE } from './ai.js';
 import { Minimap } from './minimap.js';
+import { CarEffects } from './effects.js';
 import { Records, LapRecorder, ghostAt } from './ghost.js';
 import { Weapons, WEAPONS } from './weapons.js';
 
@@ -164,6 +165,7 @@ async function setTrack(id) {
       audio.setMusic(def.music ? 'tracks/' + def.id + '/' + def.music : null);
       weapons.setTrack(T);
       buildMinimap(T);
+      carFx.clear();
     }
     G.trackId = def.id;
     return T;
@@ -215,7 +217,13 @@ function ensureCar(id) {
     cd.body = buildMeshes([{ polys: prms[0].polys, verts: prms[0].verts }], getMat).group;
     cd.box = new THREE.Box3().setFromObject(cd.body);
     cd.spheres = carSpheresFromBox(cd.box);
-    cd.wheels = [1, 2, 3, 4].map(i => prms[i] ? buildMeshes([{ polys: prms[i].polys, verts: prms[i].verts }], getMat).group : null);
+    const built = {};
+    cd.wheels = cd.params.wheels.map((w, i) => {
+      const k = w.modelNum >= 0 ? w.modelNum : -1;
+      if (!prms[k]) return null;
+      built[k] ??= buildMeshes([{ polys: prms[k].polys, verts: prms[k].verts }], getMat).group;
+      return built[k];
+    });
     return cd;
   })().catch(e => { cd.loading = null; throw e; });
   return cd.loading;
@@ -428,10 +436,27 @@ function progressValue() {
 }
 
 // Avanza las zonas de vuelta (.taz) de un auto. Devuelve el tiempo de la vuelta cuando completa una.
-function lapTick(L, p, now) {
+function lapTick(L, p, now, hint) {
   if (L.finished || G.locked) return null;
   const rv = [p.x, -p.y, -p.z];
   const N = track.nZones;
+  // pistas con pocas zonas (algunas de la comunidad traen solo la de largada): la vuelta cuenta
+  // al ENTRAR a la zona de largada y solo si antes se recorrió más de la mitad de la pista
+  if (N < 4 && track.path) {
+    // la vuelta se cuenta al cruzar el nodo de largada del recorrido (como hace RVGL), habiendo pasado por la mitad
+    const f = pathFraction(p, hint);
+    if (f > 0.4 && f < 0.7) L.half = true;
+    const last = L.lastF; L.lastF = f;
+    if (last == null) { if (f < 0.4) { L.started = true; L.lapStart = now; L.cur = 0; } return null; }
+    const crossed = last > 0.8 && f < 0.2;
+    if (!crossed) return null;
+    if (!L.started) { L.started = true; L.lapStart = now; L.half = false; L.cur = 0; return null; }
+    if (!L.half) return null;
+    L.half = false;
+    const lt = now - L.lapStart; L.lapStart = now; L.done++;
+    if (L.best == null || lt < L.best) L.best = lt;
+    return lt;
+  }
   for (const z of track.zones) {
     if (!zoneContains(z, rv)) continue;
     const want1 = (L.cur + 1) % N, want2 = (L.cur + 2) % N;
@@ -452,7 +477,7 @@ function lapTick(L, p, now) {
 function newLap() { return { cur: track.nZones - 1, started: false, done: 0, lapStart: 0, best: null, finished: false, finishTime: 0, lastZoneT: 0 }; }
 function updateLaps(now) {
   const L = G.lap;
-  const lt = lapTick(L, G.phys.pos, now);
+  const lt = lapTick(L, G.phys.pos, now, G.pathHint);
   if (lt == null) return;
   // récord de la pista (en este navegador), con el fantasma de esa vuelta
   const isRec = records.submit(G.trackId, lt, { car: G.carId, name: G.name || 'Piloto' }, lapRec.s.length > 4 ? lapRec.s : null);
@@ -482,7 +507,7 @@ function finishRace(now) {
   setTimeout(() => {
     if (G.mode !== 'race') return;
     G.mode = 'results'; $('btn-res-back').textContent = G.online && net?.active ? 'Volver a la sala' : 'Volver al menú';
-    show('scr-results');
+    show('scr-results'); renderCup();
   }, 2200);
 }
 
@@ -490,6 +515,7 @@ function addResult(r) {
   if (G.results.find(x => x.id === r.id)) return;
   G.results.push(r); G.results.sort((a, b) => a.time - b.time);
   $('res-body').innerHTML = G.results.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.name)}</td><td>${fmt(x.time)}</td></tr>`).join('');
+  renderCup();
 }
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -508,7 +534,7 @@ function startCountdown(now) {
 }
 
 async function startPractice() {
-  audio.unlock(); clearBots();
+  audio.unlock(); clearBots(); G.cup = null;
   await setTrack(G.trackId);
   await spawnMyCar(0);
   G.mode = 'practice'; G.online = false; G.laps = Infinity;
@@ -518,7 +544,8 @@ async function startPractice() {
   show(null); startCountdown(performance.now());
 }
 
-async function startRace(laps, grid, trackId) {
+async function startRace(laps, grid, trackId, cup) {
+  G.cup = cup && Array.isArray(cup.tracks) ? cup : null;
   audio.unlock(); clearBots(); clearGhost();
   if (trackId) await setTrack(trackId);
   const idx = Math.max(0, grid.indexOf(net.myId));
@@ -535,6 +562,11 @@ const botNav = {
   ahead: (st, d) => track.ai ? track.ai.ahead(st, d) : pathAhead(st.pos, d, st),
   dirAt: (st, d) => track.ai ? track.ai.dirAt(st, d) : pathDirAt(st.pos, d, st),
   finishDist: st => track.ai ? track.ai.finishDist(st) : null,
+  speedLimit: (st, alat, decel, look) => track.ai ? track.ai.speedLimit(st, alat, decel, look) : Infinity,
+  halfWidth: st => track.ai ? track.ai.halfWidth(st) : 300,
+  room: (st, margin) => track.ai ? track.ai.room(st, margin) : [-150, 150],
+  minRadius: (st, d) => track.ai ? track.ai.minRadius(st, d) : 1e5,
+  cars: () => G.carList || [],
   get total() { return track.ai?.total || 1; },
   // distancia a una pared (no piso ni rampa) en una dirección horizontal, o null
   wall: (pos, dir, len) => {
@@ -548,7 +580,7 @@ function clearBots() {
   G.bots = [];
 }
 async function startBotRace() {
-  audio.unlock(); clearGhost();
+  audio.unlock(); clearGhost(); G.cup = null;
   await setTrack(G.trackId);
   clearBots();
   if (!track.path) { $('menu-status').textContent = 'Esta pista no tiene recorrido para los rivales.'; return; }
@@ -602,6 +634,11 @@ function resetBotToPath(b) {
 }
 function updateBots(now, dt) {
   const racing = G.mode === 'race' && !G.locked;
+  // todos los autos, para que los rivales vean a quién tienen adelante
+  G.carList = [];
+  if (G.phys) G.carList.push({ pos: G.phys.pos, vel: G.phys.vel });
+  for (const b of G.bots) G.carList.push({ pos: b.phys.pos, vel: b.phys.vel });
+  for (const r of G.remotes.values()) if (r.vis && r.tpos) G.carList.push({ pos: r.pos, vel: r.vel });
   const myLaps = G.lap.done + (G.lap.started ? pathFraction() : 0);
   for (const b of G.bots) {
     const L = b.lap, D = b.driver;
@@ -616,7 +653,7 @@ function updateBots(now, dt) {
     D.band = diff > 0.15 ? Math.max(0.9, 1 - (diff - 0.15) * 0.25) : diff < -0.15 ? Math.min(1.08, 1 + (-diff - 0.15) * 0.25) : 1;
     b.phys.input = D.think(dt);
     if (D.lostT > 3) resetBotToPath(b);
-    const lt = lapTick(L, b.phys.pos, now);
+    const lt = lapTick(L, b.phys.pos, now, D.hint);
     if (lt != null && L.done >= G.laps) {
       L.finished = true; L.finishTime = now - G.goTime;
       addResult({ id: b.id, name: b.name, time: L.finishTime });
@@ -634,10 +671,51 @@ function botCollisions() {
     const oa = asOther(a), ob = asOther(b);
     const h1 = a.phys.collideWithCar(ob), h2 = b.phys.collideWithCar(oa);
     const hit = Math.max(h1 || 0, h2 || 0);
+    if (hit > 450) weapons.sparks(a.phys.hitPt, Math.min(1, hit / 1800));
     if (hit > 300 && i === 0) audio.hit(Math.min(1, hit / 2000));
     else if (hit > 300) audio.playAt('hit1', a.phys.pos, { vol: Math.min(1, hit / 2000) });
     if (hit) { weapons.onCarContact(a.id, b.id); weapons.onCarContact(b.id, a.id); }
   }
+}
+
+// ---------- Sombras, marcas de derrape y chispas ----------
+const carFx = new CarEffects(scene);
+const _wp = new THREE.Vector3();
+function localFxCar(id, phys, vis, carId, rpos, rquat) {
+  const cd = carDefs.get(carId);
+  const sz = cd?.box ? cd.box.getSize(new THREE.Vector3()) : new THREE.Vector3(60, 30, 100);
+  return { id, pos: rpos, quat: rquat, size: { x: sz.x, z: sz.z }, skid: phys.skid || 0, visible: !!vis?.root.visible,
+    wheels: phys.wheels.map(w => ({ contact: w.contact ? w.point : null, pos: w.point, r: w.radius })) };
+}
+function updateCarFx() {
+  const list = [];
+  if (G.phys && G.vis) list.push(localFxCar('me', G.phys, G.vis, G.vis.carId, G.renderPos, G.renderQuat));
+  for (const b of G.bots) list.push(localFxCar(b.id, b.phys, b.vis, b.carId, b.rpos, b.rquat));
+  for (const [id, r] of G.remotes) {
+    if (!r.vis || !r.tpos) continue;
+    const cd = carDefs.get(r.carId); if (!cd?.box) continue;
+    const sz = cd.box.getSize(new THREE.Vector3());
+    const wheels = cd.params.wheels.filter(w => w.present).map(w => {
+      const o = w.offset1;
+      return { contact: null, pos: new THREE.Vector3(o[0], -o[1], -o[2]).applyQuaternion(r.quat).add(r.pos), r: w.radius };
+    });
+    list.push({ id, pos: r.pos, quat: r.quat, size: { x: sz.x, z: sz.z }, skid: r.sk || 0, visible: r.vis.root.visible, wheels });
+  }
+  carFx.update(list, world?.bvh);
+}
+let sparkT = 0;
+function sparkAt(pos, hit, now) {
+  if (now - sparkT < 70) return;
+  sparkT = now;
+  weapons.sparks(pos, Math.min(1, hit / 1800));
+}
+
+// ---------- Bocina ----------
+let honkT = 0;
+function honk() {
+  const now = performance.now(); if (now - honkT < 700) return; honkT = now;
+  audio.play('honka', { vol: 0.8 });
+  net?.send({ t: 'honk' });
 }
 
 // ---------- Minimapa ----------
@@ -897,6 +975,7 @@ function enterLobby(code) {
 function refreshLobbyUI() {
   $('btn-start').hidden = !net.isHost; $('lap-field').hidden = !net.isHost; $('lobby-wait').hidden = net.isHost;
   $('lobby-track-field').hidden = !net.isHost; $('lobby-track-name').hidden = net.isHost;
+  $('cup-field').hidden = !net.isHost; updateLobbyCup();
   renderTrackButtons($('lobby-tracksel'));
   updateLobbyTrack();
   $('lobby-sub').textContent = net.isHost ? 'PASALE ESTE CÓDIGO A TUS AMIGOS' : 'CONECTADO A LA SALA';
@@ -910,8 +989,16 @@ $('lapsel').addEventListener('click', e => {
 $('btn-start').onclick = () => {
   const laps = +($('lapsel').querySelector('[aria-pressed=true]')?.dataset.l || 3);
   const grid = [...net.players.keys()];
-  net.send({ t: 'start', laps, grid, track: G.trackId });
-  startRace(laps, grid, G.trackId);
+  // campeonato: varias pistas seguidas empezando por la elegida
+  const n = Math.min(manifest.tracks.length, G.cupN || 0);
+  let cup = null;
+  if (n > 1) {
+    const i0 = manifest.tracks.findIndex(t => t.id === G.trackId);
+    const tracks = Array.from({ length: n }, (_, k) => manifest.tracks[(i0 + k) % manifest.tracks.length].id);
+    cup = { tracks, round: 0, laps, points: {} };
+  }
+  net.send({ t: 'start', laps, grid, track: G.trackId, cup });
+  startRace(laps, grid, G.trackId, cup);
 };
 $('btn-leave').onclick = () => { net?.close(); net = null; clearRemotes(); G.online = false; toMenu(); };
 $('btn-res-back').onclick = () => { if (G.online && net?.active) { G.mode = 'lobby'; refreshLobbyUI(); spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu(); };
@@ -946,6 +1033,68 @@ async function chooseTrack(id) {
   catch (e) { $('menu-status').textContent = 'No se pudo cargar la pista: ' + e.message; }
 }
 function updateLobbyTrack() { $('lobby-track-name').textContent = 'Pista: ' + trackDef(G.trackId).name; }
+
+// ---------- Campeonato ----------
+const CUP_POINTS = [10, 8, 6, 5, 4, 3, 2, 1];
+G.cupN = 0;
+// puntos acumulados + los de la carrera actual (según el orden de llegada)
+function cupStandings(cup = G.cup) {
+  const pts = {};
+  for (const [id, v] of Object.entries(cup.points || {})) pts[id] = { name: v.name, pts: v.pts };
+  if (!cup.done) G.results.forEach((r, i) => {
+    pts[r.id] ??= { name: r.name, pts: 0 };
+    pts[r.id].name = r.name; pts[r.id].pts += CUP_POINTS[i] || 0;
+  });
+  return Object.entries(pts).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.pts - a.pts || (a.name < b.name ? -1 : 1));
+}
+function renderCup() {
+  const box = $('cup-box');
+  box.hidden = !G.cup;
+  if (!G.cup) return;
+  const cup = G.cup, n = cup.tracks.length, last = cup.round >= n - 1;
+  const list = cupStandings();
+  $('cup-title').textContent = cup.done ? 'Campeonato terminado' : `Campeonato · pista ${cup.round + 1} de ${n}: ${trackDef(cup.tracks[cup.round]).name}`;
+  $('cup-body').innerHTML = list.map((x, i) => `<tr class="${i === 0 ? 'lead' : ''}"><td>${i + 1}</td><td>${esc(x.name)}</td><td>${x.pts}</td></tr>`).join('');
+  const host = !!net?.isHost && net.active;
+  const nb = $('btn-cup-next');
+  nb.hidden = !host || !!cup.done;
+  nb.textContent = last ? 'Terminar campeonato' : 'Siguiente pista: ' + trackDef(cup.tracks[cup.round + 1]).name;
+  const info = $('cup-info');
+  if (cup.done) info.innerHTML = list.length ? `<span class="champ">🏆 ${esc(list[0].name)}</span>` : '';
+  else info.textContent = host ? 'Cuando quieras, arrancá la siguiente (los que no llegaron suman 0).' : 'Esperando que el anfitrión arranque la siguiente pista…';
+}
+$('btn-cup-next').onclick = () => {
+  if (!G.cup || !net?.isHost) return;
+  const points = {};
+  for (const x of cupStandings()) points[x.id] = { name: x.name, pts: x.pts };
+  const cup = { ...G.cup, points };
+  if (cup.round >= cup.tracks.length - 1) {
+    G.cup = { ...cup, done: true };
+    net.send({ t: 'cupend', cup: G.cup });
+    renderCup();
+    audio.play('pickgen', { vol: 0.9 });
+    return;
+  }
+  cup.round++;
+  const grid = [...net.players.keys()];
+  const track = cup.tracks[cup.round];
+  net.send({ t: 'start', laps: cup.laps, grid, track, cup });
+  G.trackId = track;
+  startRace(cup.laps, grid, track, cup);
+};
+$('cupsel').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  G.cupN = +b.dataset.v;
+  [...$('cupsel').children].forEach(c => c.setAttribute('aria-pressed', c === b));
+  if (net?.isHost) net.send({ t: 'cupmode', n: G.cupN });
+  updateLobbyCup();
+});
+function updateLobbyCup() {
+  const n = Math.min(manifest.tracks.length, G.cupN || 0);
+  const el = $('lobby-cup-name');
+  el.hidden = net?.isHost || n < 2;
+  el.textContent = n > 1 ? `Modo: campeonato de ${n} pistas` : '';
+}
 
 // ---------- Red ----------
 function clearRemotes() { for (const r of G.remotes.values()) r.vis?.dispose(); G.remotes.clear(); audio.clearRemotes(); }
@@ -983,7 +1132,7 @@ const netHandlers = {
     $('btn-start').disabled = false;
     if (G.mode === 'lobby' && lobbySlot() !== lastLobbySlot) { lastLobbySlot = lobbySlot(); spawnMyCar(lastLobbySlot); }
     // el anfitrión le avisa la pista a quien recién entra
-    if (net.isHost) net.send({ t: 'track', track: G.trackId });
+    if (net.isHost) { net.send({ t: 'track', track: G.trackId }); net.send({ t: 'cupmode', n: G.cupN }); }
   },
   onState: d => {
     if (d.id === net?.myId) return;
@@ -991,11 +1140,14 @@ const netHandlers = {
     const r = ensureRemote(d.id, d.car || pl?.car || 'rc', pl?.name);
     r.tpos = new THREE.Vector3(...d.p); r.tquat.set(...d.q); r.vel.set(...d.v);
     if (r.pos.y < -9e4) { r.pos.copy(r.tpos); r.quat.copy(r.tquat); }
-    r.susp = d.su; r.steer = d.st; r.prog = d.pr; r.fx = d.fx | 0; r.seen = performance.now();
+    r.susp = d.su; r.steer = d.st; r.prog = d.pr; r.fx = d.fx | 0; r.sk = +d.sk || 0; r.seen = performance.now();
   },
   onEvent: d => {
-    if (d.t === 'start') { startRace(d.laps, d.grid, d.track); }
+    if (d.t === 'start') { startRace(d.laps, d.grid, d.track, d.cup); }
+    else if (d.t === 'cupend') { if (d.cup) { G.cup = { ...d.cup, done: true }; if (G.mode !== 'results') { G.mode = 'results'; show('scr-results'); } renderCup(); } }
+    else if (d.t === 'cupmode') { G.cupN = +d.n || 0; updateLobbyCup(); }
     else if (['pk', 'wf', 'pb', 'wb', 'gp'].includes(d.t)) weapons.onNet(d);
+    else if (d.t === 'honk') { const r = G.remotes.get(d.id); if (r?.vis) audio.playAt('honka', r.pos, { vol: 0.9 }); }
     else if (d.t === 'rank') { if (Array.isArray(d.order)) G.rank = { order: d.order.map(String), at: performance.now() }; }
     else if (d.t === 'track') {
       const tid = d.track;
@@ -1015,6 +1167,7 @@ const netHandlers = {
       toast('El anfitrión se fue: ahora sos vos el anfitrión');
       $('lobby-status').textContent = '';
       if (G.mode === 'lobby') refreshLobbyUI();
+      renderCup();
     }
     else if (d.t === 'full') { $('menu-status').textContent = 'La sala está llena (máximo 8).'; }
   },
@@ -1030,6 +1183,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyC') G.camMode = (G.camMode + 1) % 3;
   if (['KeyF', 'KeyE', 'Enter', 'NumpadEnter'].includes(e.code) && !e.repeat && (G.mode === 'race' || G.mode === 'practice')) { e.preventDefault(); weapons.fire(); }
   if (G.mode === 'menu' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight') && !e.repeat) stepCar(e.code === 'ArrowLeft' ? -1 : 1);
+  if (e.code === 'KeyH' && (G.mode === 'race' || G.mode === 'practice' || G.mode === 'lobby')) honk();
   if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Sonido apagado' : 'Sonido encendido');
   if (e.code === 'Equal' || e.code === 'NumpadAdd') setSteerSens(G.steerSens + 10, true);
   if (e.code === 'Minus' || e.code === 'NumpadSubtract') setSteerSens(G.steerSens - 10, true);
@@ -1136,7 +1290,7 @@ function carScale() {
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 const _camFw = new THREE.Vector3(), _camUp = new THREE.Vector3();
 const camDir = new THREE.Vector3(0, 0, -1);
-let camInit = false, orbit = 0, camY = 0, camDist = 0;
+let camInit = false, orbit = 0, camY = 0, camDist = 0, camLift = 0;
 function updateCamera(dt) {
   if (!G.phys) return;
   // la cámara sigue la posición interpolada (la que se ve), no la de física
@@ -1158,7 +1312,9 @@ function updateCamera(dt) {
   // Sin retraso de posición: la cámara va siempre a la misma distancia del auto, así el auto
   // no "tiembla" en pantalla cuando un cuadro tarda más que otro. Solo se suavizan el giro y la altura.
   camDir.lerp(fwd, 1 - Math.exp(-dt * (G.camMode === 2 ? 25 : 6))).normalize();
-  camY += (P.pos.y - camY) * (1 - Math.exp(-dt * 8));
+  // altura: sube rápido (rampas, subidas) y baja más suave; nunca muy por debajo del auto
+  camY += (P.pos.y - camY) * (1 - Math.exp(-dt * (P.pos.y > camY ? 16 : 7)));
+  camY = Math.max(camY, P.pos.y - 25);
   const base = new THREE.Vector3(P.pos.x, camY, P.pos.z);
   let want, look;
   if (G.camMode === 2) {
@@ -1168,14 +1324,30 @@ function updateCamera(dt) {
     const sc = carScale();
     const dist = (G.camMode === 0 ? 215 : 340) * sc, hgt = (G.camMode === 0 ? 70 : 120) * sc;
     // que la cámara no atraviese paredes (la distancia se acerca rápido y se aleja despacio)
-    const from = base.clone().add(new THREE.Vector3(0, 30, 0));
-    const dir = camDir.clone().negate().add(new THREE.Vector3(0, (hgt - 30) / dist, 0)).normalize();
+    // el rayo que frena la cámara contra paredes y techos sale desde el auto (no desde la altura atrasada)
+    const from = new THREE.Vector3(P.pos.x, Math.max(P.pos.y, camY) + 30, P.pos.z);
+    // si algo tapa (una loma, una rampa), primero probar mirar desde más arriba antes de acercarse
+    let best = null;
+    for (const lift of [0, 0.3, 0.65, 1.1]) {
+      const d = camDir.clone().negate().add(new THREE.Vector3(0, (hgt - 30) / dist + lift, 0)).normalize();
+      const f = Math.hypot(dist, hgt - 30);
+      const h = world.bvh.raycastFirst(new THREE.Ray(from, d), THREE.DoubleSide, 0, f);
+      const ok = h ? h.distance - 14 : f;
+      if (!best || ok > best.ok + 20) best = { lift, ok, f };
+      if (ok >= f * 0.85) break;
+    }
+    camLift += (best.lift - camLift) * (1 - Math.exp(-dt * (best.lift > camLift ? 8 : 2.5)));
+    const dir = camDir.clone().negate().add(new THREE.Vector3(0, (hgt - 30) / dist + camLift, 0)).normalize();
     const full = Math.hypot(dist, hgt - 30);
     const hit = world.bvh.raycastFirst(new THREE.Ray(from, dir), THREE.DoubleSide, 0, full);
-    const allowed = hit ? Math.max(30, hit.distance - 12) : full;
+    const allowed = hit ? Math.max(30, hit.distance - 14) : full;
     if (!camDist) camDist = allowed;
     camDist = allowed < camDist ? allowed : camDist + (allowed - camDist) * (1 - Math.exp(-dt * 3));
     want = from.addScaledVector(dir, camDist);
+    // nunca por debajo del piso (bajadas, rampas, lomas detrás del auto)
+    const topY = Math.max(want.y, P.pos.y + 25);
+    const g = world.bvh.raycastFirst(new THREE.Ray(new THREE.Vector3(want.x, topY, want.z), new THREE.Vector3(0, -1, 0)), THREE.DoubleSide, 0, topY - want.y + 30);
+    if (g && g.point.y + 16 > want.y) want.y = g.point.y + 16;
     look = base.clone().addScaledVector(camDir, 60).add(new THREE.Vector3(0, 22, 0));
   }
   camPos.copy(want); camLook.copy(look); camInit = true;
@@ -1310,6 +1482,7 @@ function frame(now) {
       const cd = carDefs.get(r.carId); if (!cd?.spheres) continue;
       const hit = G.phys.collideWithCar({ pos: r.pos, quat: r.quat, vel: r.vel, spheres: cd.spheres, mass: cd.params.mass || 1.2 });
       if (hit > 300) audio.hit(Math.min(1, hit / 2000));
+      if (hit > 450) sparkAt(G.phys.hitPt, hit, now);
       if (hit) weapons.onCarContact(net.myId, id);
     }
     acc -= FIXED;
@@ -1369,7 +1542,7 @@ function frame(now) {
     netT = 0;
     const r1 = v => Math.round(v * 10) / 10, r3 = v => Math.round(v * 1000) / 1000;
     net.send({ t: 'state', car: G.carId, p: [r1(P.pos.x), r1(P.pos.y), r1(P.pos.z)], q: [r3(P.quat.x), r3(P.quat.y), r3(P.quat.z), r3(P.quat.w)],
-      v: [r1(P.vel.x), r1(P.vel.y), r1(P.vel.z)], su: P.wheels.map(w => r1(w.suspOffset)), st: P.wheels.map(w => r3(w.steerAngle || 0)), pr: (G.lastSentProg = G.mode === 'race' ? progressValue() : 0), fx: weapons.myFxBits() });
+      v: [r1(P.vel.x), r1(P.vel.y), r1(P.vel.z)], su: P.wheels.map(w => r1(w.suspOffset)), st: P.wheels.map(w => r3(w.steerAngle || 0)), pr: (G.lastSentProg = G.mode === 'race' ? progressValue() : 0), fx: weapons.myFxBits(), sk: Math.round((P.skid || 0) * 10) / 10 });
     // el anfitrión arma la clasificación y la reparte (así todos ven el mismo orden)
     if (net.isHost && G.mode === 'race' && now - (G.rankSent || 0) > 250) { G.rankSent = now; broadcastRank(); }
   }
@@ -1396,6 +1569,9 @@ function frame(now) {
   // sonido: motor propio, golpes contra la pista, rivales y oyente en la cámara
   audio.updateOwn(Math.abs(P.fwdSpeed) / P.top, inp.throttle, P.skid || 0, driving);
   if (driving && P.impact > 350) audio.hit(Math.min(1, P.impact / 1800));
+  if (driving && P.impact > 550) sparkAt(P.impactPt, P.impact, now);
+  for (const b of G.bots) if (b.phys.impact > 650) weapons.sparks(b.phys.impactPt, Math.min(1, b.phys.impact / 1800));
+  updateCarFx();
   if (audio.ctx) {
     for (const [id, r] of G.remotes) {
       if (!r.vis) continue;
@@ -1447,14 +1623,16 @@ async function boot() {
         now += 1000 / 60;
         updateBots(now, FIXED);
         world.bvh.update?.(FIXED);
-        for (const b of G.bots) b.phys.step(FIXED);
+        for (const b of G.bots) { const v0 = b.phys.fwdSpeed; b.phys.step(FIXED); if (b.phys.impact > 450 && b.phys.impactWall) { b.crashes = (b.crashes || 0) + 1; if (log) (log.crash ??= []).push([b.name.slice(0, 8), Math.round(b.phys.pos.x), Math.round(b.phys.pos.z), Math.round(v0), Math.round(b.phys.impact), b.driver.lastWant | 0]); } }
         botCollisions();
         weapons.update(FIXED, now);
+        if (log?.trace && i % 3 === 0) for (const b of G.bots) log.trace.push([b.phys.pos.x, b.phys.pos.y, b.phys.pos.z]);
         if (log && i % 30 === 0) log.push(G.bots.map(b => [Math.round(b.phys.pos.x), Math.round(b.phys.pos.z), Math.round(b.phys.fwdSpeed), b.lap.cur, b.lap.done]));
       }
       return now;
     };
     window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate, audio, weapons, THREE, gridSlot, startBotRace, botProgress, TUNE, records, BotDriver, botNav,
+      finishTest: t => { G.locked = false; G.goTime = performance.now() - t; finishRace(performance.now()); },
       netIsHost: () => !!net?.isHost, netDrop: () => { try { net.hostConn?.close(); } catch (e) {} } };
   } catch (e) {
     console.error(e);

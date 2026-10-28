@@ -5,7 +5,7 @@ Una versión para el navegador de Re-Volt, hecha con los modelos, texturas y
 parámetros originales del juego. Se juega en Chrome, solo o online con amigos
 (hasta 8 por sala).
 
-Pistas (7):
+Pistas (10):
   - Toys in the Hood 1
   - Toy World 1 (la juguetería)
   - Casino RV (con la ruleta que gira)
@@ -13,14 +13,18 @@ Pistas (7):
   - Museo 1
   - Toytanic 1 (el barco)
   - Jardín Botánico
+  - ARM Kart Track
+  - Evergreen Hills
+  - Donniengton Park
 
-Autos (21):
+Autos (22):
   - Clásicos: RC Bandit, Col. Moss, Adeon, AMW, Volken Turbo, Dust Mite,
     Panga, RC San
   - Cars 2: Lightning McQueen, Francesco Bernoulli, Max Schnell,
     Shu Todoroki, Carla Veloso, Raoul ÇaRoule, Jeff Gorvette, Miguel Camino,
     Nigel Gearsley
-  - Touge: Styx, [D] Styx, Hestia, [D] Hestia
+  - Reales: Porsche Panamera Turbo Sport Turismo, Lamborghini Gallardo,
+    Mitsubishi Lancer Evo VII GSR, Nissan Skyline GTS-R, VW Golf TDI
 
 En el menú, el garage muestra cada auto con su foto y sus datos reales
 (velocidad máxima, aceleración, agarre, dirección, peso, motor y tracción).
@@ -67,6 +71,15 @@ MINIMAPA, RÉCORDS Y FANTASMA
   transparente que repite esa vuelta, para que veas dónde ganás o perdés.
 
 
+CAMPEONATO ONLINE
+-----------------
+En la sala, el anfitrión elige "Modo": Una carrera, Copa de 3, Copa de 4 o
+Todas las pistas. En la copa se corren varias pistas seguidas (empezando por
+la elegida) y se suman puntos por posición: 10, 8, 6, 5, 4, 3, 2 y 1. En la
+pantalla de resultados se ve la tabla del campeonato y el anfitrión arranca
+la siguiente pista. Al final aparece el campeón.
+
+
 CÓMO JUGAR ONLINE
 -----------------
 - Uno toca "Crear sala" y le aparece un código de 5 letras.
@@ -87,6 +100,7 @@ CONTROLES
 Flechas o WASD ........ manejar
 Espacio ............... freno de mano
 F o Enter ............. usar el arma que agarraste
+H ..................... bocina (tus amigos la escuchan)
 R ..................... reaparecer (si quedás trabado o dado vuelta)
 C ..................... cambiar cámara (cerca / lejos / paragolpes)
 M ..................... prender o apagar el sonido

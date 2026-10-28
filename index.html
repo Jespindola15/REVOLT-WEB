@@ -58,7 +58,7 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
 .g-shot { width: 100%; aspect-ratio: 16 / 9; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 70%, #2f3a72 0%, var(--ink) 70%); border-radius: 4px; overflow: hidden; }
 .g-shot img { width: 100%; height: 100%; object-fit: contain; }
 .g-shot img:not([src]) { visibility: hidden; }
-.g-name { font-family: var(--display); font-size: 22px; color: var(--volt); text-align: center; line-height: 1.05; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-name { font-family: var(--display); font-size: 21px; color: var(--volt); text-align: center; line-height: 1.05; max-width: 100%; text-wrap: balance; }
 .g-sub { font-size: 12px; color: var(--muted); letter-spacing: 1px; text-align: center; }
 .g-stats { display: grid; grid-template-columns: auto 1fr auto; gap: 5px 8px; align-items: center; margin: 0; font-size: 12px; }
 .g-stats dt { color: var(--muted); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; font-size: 11px; }
@@ -145,6 +145,12 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
 .standings li b { font-family: var(--display); font-weight: 400; color: var(--volt); }
 .standings li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .standings li em { font-style: normal; font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+
+/* campeonato */
+.cup { display: flex; flex-direction: column; gap: 8px; border-top: 2px solid var(--ink-3); padding-top: 12px; }
+.cup-title { font-family: var(--display); font-weight: 400; color: var(--volt); margin: 0; font-size: 20px; }
+.cup .results tr.lead td { color: var(--volt); font-weight: 700; }
+.cup .champ { font-family: var(--display); font-size: 26px; color: var(--volt); text-shadow: 3px 3px 0 var(--coral); text-align: center; }
 
 /* minimapa */
 .minimap { width: 170px; height: 170px; margin-top: 6px; background: rgba(18,22,43,.55); border: 2px solid var(--ink-3); border-radius: 6px; }
@@ -279,6 +285,14 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
         <button type="button" class="g-arrow" id="lc-next" aria-label="Auto siguiente">›</button>
       </div>
     </div>
+    <div class="field" id="cup-field">
+      <span class="label">Modo</span>
+      <div class="lapsel" id="cupsel">
+        <button type="button" data-v="0" aria-pressed="true">Una carrera</button><button type="button" data-v="3">Copa de 3</button><button type="button" data-v="4">Copa de 4</button><button type="button" data-v="99">Todas</button>
+      </div>
+      <p class="hint">En la copa se corren varias pistas seguidas y se suman puntos: 10, 8, 6, 5, 4, 3, 2 y 1.</p>
+    </div>
+    <p class="hint" id="lobby-cup-name" hidden></p>
     <div class="field" id="lap-field">
       <span class="label">Vueltas</span>
       <div class="lapsel" id="lapsel">
@@ -302,7 +316,13 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
   <div class="panel">
     <h2 class="logo" style="font-size:28px">RESULTADOS</h2>
     <table class="results"><thead><tr><th>#</th><th>Piloto</th><th>Tiempo</th></tr></thead><tbody id="res-body"></tbody></table>
-    <button class="btn" id="btn-res-back">Volver a la sala</button>
+    <div class="cup" id="cup-box" hidden>
+      <h3 class="cup-title" id="cup-title"></h3>
+      <table class="results"><thead><tr><th>#</th><th>Piloto</th><th>Puntos</th></tr></thead><tbody id="cup-body"></tbody></table>
+      <p class="hint" id="cup-info"></p>
+      <button class="btn" id="btn-cup-next" hidden>Siguiente pista</button>
+    </div>
+    <button class="btn ghost" id="btn-res-back">Volver a la sala</button>
   </div>
 </section>
 
@@ -329,7 +349,7 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
   <div class="weapon" id="h-weapon" hidden><i></i><div><b></b><br><small>usar con <kbd>F</kbd> o <kbd>Enter</kbd></small></div></div>
   <div class="keys">
     <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> o <kbd>WASD</kbd> manejar · <kbd>Espacio</kbd> freno de mano<br>
-    <kbd>F</kbd> usar arma · <kbd>R</kbd> reaparecer · <kbd>C</kbd> cámara · <kbd>M</kbd> sonido · <kbd>+</kbd><kbd>−</kbd> sensibilidad · también joystick
+    <kbd>F</kbd> usar arma · <kbd>H</kbd> bocina · <kbd>R</kbd> reaparecer · <kbd>C</kbd> cámara · <kbd>M</kbd> sonido · <kbd>+</kbd><kbd>−</kbd> sensibilidad · también joystick
   </div>
 </div>
 

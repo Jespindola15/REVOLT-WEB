@@ -1,0 +1,43 @@
+;--------------------------
+;Revolt .INF file structure
+;--------------------------
+
+NAME                   'Evergreen Hills Raceway'                   	  ;The name of the level as seen in-game
+STARTPOS               -3050 0 -45                              ;Start position of the car (x, y, z)
+STARTPOSREV            -2125 0 -305                              ;Start position of the car in reverse mode
+STARTROT               0.25                                  ;Start rotation of the car (0 - 1)
+STARTROTREV            0.75                                  ;Start rotation of the car in reverse mode (0 - 1)
+STARTGRID		0
+STARTGRIDREV		0
+FARCLIP                34000                              ;Far clipping distance (draw distance)
+FOGSTART               33000                              ;Fog start (slightly less than FARCLIP)
+FOGCOLOR               0 0 0                              ;Fog and background color (RGB)
+VERTFOGSTART           0                                  ;Vertical fog start (as in rooftops)
+VERTFOGEND             0                                  ;Vertical fog end (as in rooftops)
+WORLDRGBPER            100                                ;RGB percent of original world gouraud (0 is dark)
+MODELRGBPER            100                                ;RGB percent of original model (cars, etc.) gouraud
+INSTANCERGBPER         80                                 ;RGB percent of original instance (decorations, etc.) gouraud
+MIRRORS                0 0.75 0 256                       ;Type - mix - intensity start - distance
+MUSIC		       'music\circuit'
+REDBOOK                4 9                                ;Redbook soundtrack if redbook folder is present. Two values, first and last track.
+ENVROLL                'levels\testtrack\envroll.bmp'     ;Reflection on cars
+ENVSTILL               'levels\testtrack\envstill.bmp'    ;Reflection on stationary objects and the ball bearing weapon
+SHADOWBOX              -96                                ;Changes the contrast/brightness or the shadows on the track, default -96.
+ROCK                   0 0 0 0                            ;Rocking effect like on Toytanic.
+TEXTUREPROPS	       0 1 1 1
+TEXTUREPROPS	       1 1 1 1
+TEXTUREPROPS	       2 1 1 1
+TEXTUREPROPS	       3 1 1 1
+TEXTUREPROPS	       4 1 1 1
+TEXTUREPROPS	       5 1 1 1
+TEXTUREPROPS	       6 1 1 1
+TEXTUREPROPS	       7 1 1 1
+TEXTUREPROPS	       8 1 1 1
+TEXTUREPROPS	       9 1 1 1
+TEXTUREPROPS	       10 1 1 1
+TEXTUREPROPS	       11 1 1 1
+TEXTUREPROPS	       12 1 1 1
+TEXTUREPROPS	       13 1 1 1
+DIFFICULTY	       2
+CHALLENGE	       0 41 500
+CHALLENGEREV	       0 41 500
