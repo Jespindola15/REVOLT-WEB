@@ -180,3 +180,58 @@ export function parsePAN(buf) {
   }
   return { nodes, start, total };
 }
+
+// .fan: nodos de IA (por donde manejan los rivales de la computadora). Cada nodo tiene los dos
+// bordes de la pista (Node[0] y Node[1]), la línea de carrera entre ellos (0..1) y hasta 2 caminos.
+export function parseFAN(buf) {
+  const dv = new DataView(buf);
+  const n = dv.getInt16(0, true);
+  const nodes = [];
+  for (let i = 0; i < n; i++) {
+    const o = 4 + i * 76;
+    if (o + 76 > buf.byteLength) break;
+    const p = k => [dv.getFloat32(o + 48 + k * 16, true), dv.getFloat32(o + 52 + k * 16, true), dv.getFloat32(o + 56 + k * 16, true)];
+    nodes.push({
+      priority: dv.getInt8(o), start: dv.getInt8(o + 1),
+      line: dv.getFloat32(o + 4, true), dist: dv.getFloat32(o + 8, true),
+      prev: [dv.getInt32(o + 28, true), dv.getInt32(o + 32, true)].filter(x => x >= 0 && x < n),
+      next: [dv.getInt32(o + 36, true), dv.getInt32(o + 40, true)].filter(x => x >= 0 && x < n),
+      a: p(0), b: p(1),
+    });
+  }
+  return nodes;
+}
+
+// .ncp de un objeto: polígonos de choque guardados como planos (la cara + 3 o 4 bordes).
+// Se reconstruyen los vértices cortando el plano de la cara con cada par de bordes seguidos.
+// Devuelve triángulos en coordenadas Re-Volt [x,y,z, x,y,z, ...]
+export function parseNCP(buf) {
+  const dv = new DataView(buf);
+  if (buf.byteLength < 2) return new Float32Array(0);
+  const n = dv.getInt16(0, true);
+  const out = [];
+  const pl = (o, k) => [dv.getFloat32(o + 8 + k * 16, true), dv.getFloat32(o + 12 + k * 16, true), dv.getFloat32(o + 16 + k * 16, true), dv.getFloat32(o + 20 + k * 16, true)];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  for (let i = 0; i < n; i++) {
+    const o = 2 + i * 112;
+    if (o + 112 > buf.byteLength) break;
+    const type = dv.getInt32(o, true);
+    const m = type & 1 ? 4 : 3;
+    const P = [0, 1, 2, 3, 4].map(k => pl(o, k));
+    const bb = [0, 1, 2, 3, 4, 5].map(k => dv.getFloat32(o + 88 + k * 4, true));
+    const vs = [];
+    for (let k = 0; k < m; k++) {
+      const a = P[0], b = P[1 + k], c = P[1 + (k + 1) % m];
+      const bc = cross(b, c), ca = cross(c, a), ab = cross(a, b);
+      const det = dot(a, bc);
+      if (Math.abs(det) < 1e-6) { vs.length = 0; break; }
+      const v = [0, 1, 2].map(j => -(a[3] * bc[j] + b[3] * ca[j] + c[3] * ab[j]) / det);
+      // por seguridad, dentro de la caja del polígono
+      v[0] = Math.min(bb[1], Math.max(bb[0], v[0])); v[1] = Math.min(bb[3], Math.max(bb[2], v[1])); v[2] = Math.min(bb[5], Math.max(bb[4], v[2]));
+      vs.push(v);
+    }
+    for (let k = 1; k + 1 < vs.length; k++) out.push(...vs[0], ...vs[k], ...vs[k + 1]);
+  }
+  return new Float32Array(out);
+}

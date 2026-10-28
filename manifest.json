@@ -256,37 +256,33 @@
     "9": "tex9.png"
    },
    "instances": {
-    "tree1": {
-     "prm": "tree1.prm",
-     "solid": false
-    },
-    "bin": {
-     "prm": "bin.prm",
-     "solid": true
-    },
-    "carbase": {
-     "prm": "carbase.prm",
-     "solid": true
-    },
-    "ramp3": {
-     "prm": "ramp3.prm",
-     "solid": true
-    },
-    "bmw2": {
-     "prm": "bmw2.prm",
-     "solid": true
-    },
-    "ramp1": {
-     "prm": "ramp1.prm",
-     "solid": true
-    },
     "seat1": {
      "prm": "seat1.prm",
      "solid": false
     },
-    "startrev": {
-     "prm": "startrev.prm",
+    "lampost": {
+     "prm": "lampost.prm",
+     "solid": true,
+     "ncp": "lampost.ncp"
+    },
+    "whitepos": {
+     "prm": "whitepost.prm",
+     "solid": true,
+     "ncp": "whitepost.ncp"
+    },
+    "house2": {
+     "prm": "house2.prm",
      "solid": false
+    },
+    "bmw2": {
+     "prm": "bmw2.prm",
+     "solid": true,
+     "ncp": "bmw2.ncp"
+    },
+    "ramp3": {
+     "prm": "ramp3.prm",
+     "solid": true,
+     "ncp": "ramp3.ncp"
     },
     "steer": {
      "prm": "steer.prm",
@@ -296,49 +292,65 @@
      "prm": "house1.prm",
      "solid": false
     },
-    "whitepos": {
-     "prm": "whitepost.prm",
-     "solid": true
+    "barrier": {
+     "prm": "barrier.prm",
+     "solid": true,
+     "ncp": "barrier.ncp"
     },
-    "bmw": {
-     "prm": "bmw.prm",
-     "solid": true
+    "barrierp": {
+     "prm": "barrierpole.prm",
+     "solid": true,
+     "ncp": "barrierpole.ncp"
     },
-    "lampost": {
-     "prm": "lampost.prm",
-     "solid": true
-    },
-    "seat2": {
-     "prm": "seat2.prm",
+    "startrev": {
+     "prm": "startrev.prm",
      "solid": false
     },
     "hoop": {
      "prm": "hoop.prm",
      "solid": false
     },
-    "barrier": {
-     "prm": "barrier.prm",
-     "solid": true
+    "carbase": {
+     "prm": "carbase.prm",
+     "solid": true,
+     "ncp": "carbase.ncp"
     },
-    "skate": {
-     "prm": "skate.prm",
-     "solid": true
+    "tree2": {
+     "prm": "tree2.prm",
+     "solid": true,
+     "ncp": "tree2.ncp"
     },
-    "house2": {
-     "prm": "house2.prm",
+    "seat2": {
+     "prm": "seat2.prm",
      "solid": false
+    },
+    "tree1": {
+     "prm": "tree1.prm",
+     "solid": false
+    },
+    "ramp1": {
+     "prm": "ramp1.prm",
+     "solid": true,
+     "ncp": "ramp1.ncp"
     },
     "start": {
      "prm": "start.prm",
      "solid": false
     },
-    "barrierp": {
-     "prm": "barrierpole.prm",
-     "solid": true
+    "bin": {
+     "prm": "bin.prm",
+     "solid": true,
+     "ncp": "bin.ncp"
     },
-    "tree2": {
-     "prm": "tree2.prm",
-     "solid": true
+    "skate": {
+     "prm": "skate.prm",
+     "solid": true,
+     "ncp": "skate.ncp"
+    },
+    "bmw": {
+     "prm": "bmw.prm",
+     "solid": true,
+     "ncp": "bmw.ncp"
     }
    },
    "sky": {
@@ -349,7 +361,8 @@
     "tp": "sky_tp.jpg",
     "bt": "sky_bt.jpg"
    },
-   "music": "music.ogg"
+   "music": "music.ogg",
+   "barrel": null
   },
   {
    "id": "toylite",
@@ -364,41 +377,18 @@
     "6": "tex6.jpg"
    },
    "instances": {
-    "nelly": {
-     "prm": "nelly.prm",
-     "solid": true
+    "spotgl": {
+     "prm": "spotgl.prm",
+     "solid": false
     },
-    "carboxc": {
-     "prm": "carboxc.prm",
-     "solid": true
+    "hidepoly": {
+     "prm": "hidepoly.prm",
+     "solid": false
     },
-    "carboxa": {
-     "prm": "carboxa.prm",
-     "solid": true
-    },
-    "genboxc": {
-     "prm": "genboxc.prm",
-     "solid": true
-    },
-    "rocketpa": {
-     "prm": "rocketpad.prm",
-     "solid": true
-    },
-    "chest": {
-     "prm": "chest.prm",
-     "solid": true
-    },
-    "genbox": {
-     "prm": "genbox.prm",
-     "solid": true
-    },
-    "duplo": {
-     "prm": "duplo.prm",
-     "solid": true
-    },
-    "carboxb": {
-     "prm": "carboxb.prm",
-     "solid": true
+    "bot_box": {
+     "prm": "bot_box.prm",
+     "solid": true,
+     "ncp": "bot_box.ncp"
     },
     "bspotgl": {
      "prm": "bspotgl.prm",
@@ -408,93 +398,138 @@
      "prm": "shelf.prm",
      "solid": false
     },
-    "palm": {
-     "prm": "palm.prm",
-     "solid": false
+    "genbox": {
+     "prm": "genbox.prm",
+     "solid": true,
+     "ncp": "genbox.ncp"
     },
-    "gator": {
-     "prm": "gator.prm",
-     "solid": true
+    "chest": {
+     "prm": "chest.prm",
+     "solid": true,
+     "ncp": "chest.ncp"
+    },
+    "spire": {
+     "prm": "spire.prm",
+     "solid": true,
+     "ncp": "spire.ncp"
+    },
+    "crane": {
+     "prm": "crane.prm",
+     "solid": true,
+     "ncp": "crane.ncp"
+    },
+    "genboxc": {
+     "prm": "genboxc.prm",
+     "solid": true,
+     "ncp": "genboxc.ncp"
+    },
+    "carboxa": {
+     "prm": "carboxa.prm",
+     "solid": true,
+     "ncp": "carboxa.ncp"
+    },
+    "cardbox": {
+     "prm": "cardbox.prm",
+     "solid": true,
+     "ncp": "cardbox.ncp"
     },
     "hopper": {
      "prm": "hopper.prm",
      "solid": false
     },
-    "ball": {
-     "prm": "ball.prm",
-     "solid": false
-    },
-    "drawer": {
-     "prm": "drawer.prm",
-     "solid": true
-    },
-    "spotgl": {
-     "prm": "spotgl.prm",
-     "solid": false
-    },
-    "genboxd": {
-     "prm": "genboxd.prm",
-     "solid": true
-    },
     "tallbox": {
      "prm": "tallbox.prm",
      "solid": false
     },
-    "walker": {
-     "prm": "walker.prm",
-     "solid": true
-    },
-    "teddy": {
-     "prm": "teddy.prm",
-     "solid": true
-    },
-    "genboxb": {
-     "prm": "genboxb.prm",
-     "solid": true
-    },
-    "truck": {
-     "prm": "truck.prm",
-     "solid": false
-    },
-    "cardbox": {
-     "prm": "cardbox.prm",
-     "solid": true
-    },
-    "hidepoly": {
-     "prm": "hidepoly.prm",
-     "solid": false
-    },
-    "robot": {
-     "prm": "robot.prm",
-     "solid": false
+    "duplo": {
+     "prm": "duplo.prm",
+     "solid": true,
+     "ncp": "duplo.ncp"
     },
     "dozer": {
      "prm": "dozer.prm",
-     "solid": true
-    },
-    "spire": {
-     "prm": "spire.prm",
-     "solid": true
-    },
-    "carboxd": {
-     "prm": "carboxd.prm",
-     "solid": true
-    },
-    "bot_box": {
-     "prm": "bot_box.prm",
-     "solid": true
+     "solid": true,
+     "ncp": "dozer.ncp"
     },
     "bigrocke": {
      "prm": "bigrocket.prm",
      "solid": false
     },
-    "crane": {
-     "prm": "crane.prm",
-     "solid": true
+    "rocketpa": {
+     "prm": "rocketpad.prm",
+     "solid": true,
+     "ncp": "rocketpad.ncp"
+    },
+    "carboxc": {
+     "prm": "carboxc.prm",
+     "solid": true,
+     "ncp": "carboxc.ncp"
+    },
+    "robot": {
+     "prm": "robot.prm",
+     "solid": false
+    },
+    "genboxd": {
+     "prm": "genboxd.prm",
+     "solid": true,
+     "ncp": "genboxd.ncp"
+    },
+    "genboxb": {
+     "prm": "genboxb.prm",
+     "solid": true,
+     "ncp": "genboxb.ncp"
+    },
+    "walker": {
+     "prm": "walker.prm",
+     "solid": true,
+     "ncp": "walker.ncp"
+    },
+    "drawer": {
+     "prm": "drawer.prm",
+     "solid": true,
+     "ncp": "drawer.ncp"
+    },
+    "carboxb": {
+     "prm": "carboxb.prm",
+     "solid": true,
+     "ncp": "carboxb.ncp"
+    },
+    "carboxd": {
+     "prm": "carboxd.prm",
+     "solid": true,
+     "ncp": "carboxd.ncp"
+    },
+    "gator": {
+     "prm": "gator.prm",
+     "solid": true,
+     "ncp": "gator.ncp"
+    },
+    "palm": {
+     "prm": "palm.prm",
+     "solid": false
+    },
+    "truck": {
+     "prm": "truck.prm",
+     "solid": false
+    },
+    "teddy": {
+     "prm": "teddy.prm",
+     "solid": true,
+     "ncp": "teddy.ncp"
+    },
+    "ball": {
+     "prm": "ball.prm",
+     "solid": false
+    },
+    "nelly": {
+     "prm": "nelly.prm",
+     "solid": true,
+     "ncp": "nelly.ncp"
     }
    },
    "sky": {},
-   "music": "music.ogg"
+   "music": "music.ogg",
+   "barrel": null
   },
   {
    "id": "casinorv",
@@ -535,7 +570,8 @@
     "tp": "sky_tp.jpg",
     "bt": "sky_bt.jpg"
    },
-   "music": "music.ogg"
+   "music": "music.ogg",
+   "barrel": "barrel.prm"
   }
  ],
  "sfx": [

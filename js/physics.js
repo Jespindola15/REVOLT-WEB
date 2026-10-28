@@ -206,6 +206,7 @@ export class CarPhysics {
 
       const r = _v2.copy(hit.point).sub(this.pos);
       const vc = new THREE.Vector3().crossVectors(this.angVel, r).add(this.vel);
+      if (hit.vel) vc.sub(hit.vel); // piso que se mueve (la ruleta): las ruedas agarran contra el piso, no contra el mundo
       const vUp = vc.dot(up);
       let N = w.k * w.comp - w.c * vUp;
       // barra estabilizadora: compensa la diferencia de compresión con la rueda del otro lado del mismo eje

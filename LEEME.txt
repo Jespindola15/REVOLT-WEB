@@ -38,6 +38,16 @@ clic, el navegador no lo deja cargar los archivos.
 7. Pasales el link a tus amigos.
 
 
+CARRERA CONTRA LA COMPUTADORA
+-----------------------------
+En el menú, "Contra la computadora": elegí cuántos rivales (1, 3, 5 o 7),
+las vueltas y el nivel (Fácil, Normal o Difícil) y tocá "Carrera contra la
+PC". Arrancás último, como en Re-Volt. Los rivales siguen la línea de
+carrera original del juego (los nodos de IA de cada pista), frenan antes
+de las curvas, eligen caminos en las bifurcaciones y también agarran y usan
+armas. "Práctica libre" es para dar vueltas solo, sin rivales.
+
+
 CÓMO JUGAR ONLINE
 -----------------
 - Uno toca "Crear sala" y le aparece un código de 5 letras.
@@ -90,8 +100,9 @@ el cielo, las texturas de todo, los modelos de los autos y sus parámetros
 Distinto: la física del manejo está hecha de nuevo a partir de esos
 parámetros, porque la física original de Re-Volt no es pública. Se siente
 parecida pero no idéntica. Las armas funcionan como en el original pero
-con efectos simplificados. Tampoco tiene rivales de la computadora (todavía)
-ni reflejos cromados en los autos.
+con efectos simplificados. Los rivales de la computadora manejan con su
+propia lógica (siguiendo la línea de carrera original). No tiene reflejos
+cromados en los autos.
 
 
 PROBARLO EN TU PC SIN SUBIRLO

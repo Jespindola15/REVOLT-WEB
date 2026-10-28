@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
-import { parsePRM, parseW, parseFIN, parseTAZ, parseINF, parseCarParams, parsePAN, zoneContains, rv2three } from './rvformats.js';
+import { parsePRM, parseW, parseFIN, parseTAZ, parseINF, parseCarParams, parsePAN, parseFAN, parseNCP, zoneContains, rv2three } from './rvformats.js';
 import { loadTexture, makeMaterials, buildMeshes } from './build.js';
 import { CarPhysics, MPH_PER_UNIT, carSpheresFromBox } from './physics.js';
 import { Net } from './net.js';
 import { GameAudio } from './audio.js';
+import { TrackCollider, Spinner } from './world.js';
+import { BotDriver, AiPath, DIFFICULTY, TUNE } from './ai.js';
 import { Weapons, WEAPONS } from './weapons.js';
 
 THREE.ColorManagement.enabled = false;
@@ -64,7 +66,8 @@ async function buildTrack(T) {
   const meshes = parseW(wBuf);
   // Instancias (.fin): casas, árboles, postes, rampas...
   const fins = finBuf ? parseFIN(finBuf) : [];
-  const prmCache = new Map();
+  const prmCache = new Map(), ncpCache = new Map();
+  const extraColl = []; // choques de los objetos con su malla .ncp original
   const keys = Object.keys(T.instances || {});
   for (const f of fins) {
     const key = keys.find(k => k === f.name) || keys.find(k => f.name.startsWith(k) || k.startsWith(f.name));
@@ -73,18 +76,53 @@ async function buildTrack(T) {
     if (!prmCache.has(def.prm)) prmCache.set(def.prm, parsePRM(await fetchBuf(dir + def.prm)));
     const prm = prmCache.get(def.prm);
     const M = f.mat, P = f.pos;
-    meshes.push({
-      polys: prm.polys, verts: prm.verts, solid: def.solid,
-      xform: (x, y, z) => rv2three(
-        P[0] + x * M[0] + y * M[3] + z * M[6],
-        P[1] + x * M[1] + y * M[4] + z * M[7],
-        P[2] + x * M[2] + y * M[5] + z * M[8]),
-    });
+    const xform = (x, y, z) => rv2three(
+      P[0] + x * M[0] + y * M[3] + z * M[6],
+      P[1] + x * M[1] + y * M[4] + z * M[7],
+      P[2] + x * M[2] + y * M[5] + z * M[8]);
+    let ncp = null;
+    if (def.ncp) {
+      if (!ncpCache.has(def.ncp)) ncpCache.set(def.ncp, await fetchBuf(dir + def.ncp).then(parseNCP).catch(() => null));
+      ncp = ncpCache.get(def.ncp);
+    }
+    if (ncp && ncp.length) {
+      for (let i = 0; i < ncp.length; i += 3) extraColl.push(...xform(ncp[i], ncp[i + 1], ncp[i + 2]));
+      meshes.push({ polys: prm.polys, verts: prm.verts, solid: false, xform });
+    } else meshes.push({ polys: prm.polys, verts: prm.verts, solid: def.solid, xform });
   }
   const built = buildMeshes(meshes, getMat, { brightness: 1.0 });
   const cg = new THREE.BufferGeometry();
-  cg.setAttribute('position', new THREE.BufferAttribute(built.collision, 3));
-  const bvh = new MeshBVH(cg);
+  const allColl = new Float32Array(built.collision.length + extraColl.length);
+  allColl.set(built.collision); allColl.set(extraColl, built.collision.length);
+  cg.setAttribute('position', new THREE.BufferAttribute(allColl, 3));
+  const bvh = new TrackCollider(new MeshBVH(cg));
+  // objetos del .fob: bonus de armas (tipo 30) y objetos que giran (tipo 0, "barril": la ruleta del casino)
+  const fob = [];
+  try {
+    const dv = new DataView(await fetchBuf(dir + T.id + '.fob'));
+    const n = dv.getInt32(0, true);
+    for (let i = 0; i < n; i++) {
+      const o = 4 + i * 56, f = k => dv.getFloat32(o + 20 + k * 4, true);
+      fob.push({ id: dv.getInt32(o, true), flags: [1, 2, 3, 4].map(k => dv.getInt32(o + k * 4, true)),
+        pos: [f(0), f(1), f(2)], up: [f(3), f(4), f(5)], look: [f(6), f(7), f(8)] });
+    }
+  } catch (e) {}
+  const pickups = fob.filter(o => o.id === 30).map(o => new THREE.Vector3(...rv2three(...o.pos)));
+  if (T.barrel) {
+    const prm = parsePRM(await fetchBuf(dir + T.barrel));
+    for (const o of fob.filter(o => o.id === 0)) {
+      const U = o.up, L = o.look;
+      const R = [U[1] * L[2] - U[2] * L[1], U[2] * L[0] - U[0] * L[2], U[0] * L[1] - U[1] * L[0]];
+      const xf = (x, y, z) => rv2three(x * R[0] + y * U[0] + z * L[0], x * R[1] + y * U[1] + z * L[1], x * R[2] + y * U[2] + z * L[2]);
+      const b = buildMeshes([{ polys: prm.polys, verts: prm.verts, xform: xf }], getMat, { brightness: 1.0 });
+      b.group.position.set(...rv2three(...o.pos));
+      built.group.add(b.group);
+      // gira sobre su eje (el eje X del modelo); la velocidad sale del primer parámetro del objeto
+      const sp = new Spinner(b.group, b.collision, new THREE.Vector3(...rv2three(...R)), (o.flags[0] || 10) * 0.012);
+      sp.update(0);
+      bvh.spinners.push(sp);
+    }
+  }
   const fc = inf.fogColor.map(v => v / 255);
   const bg = new THREE.Color(fc[0], fc[1], fc[2]);
   const far = Math.max(20000, inf.farClip + 2000);
@@ -94,18 +132,10 @@ async function buildTrack(T) {
   const skyGroup = await buildSky(dir, T.sky || {});
   let path = null;
   try { path = parsePAN(await fetchBuf(dir + T.id + '.pan')); } catch (e) {}
-  // bonus de armas: objetos tipo 30 ("pickup") del .fob, en los mismos lugares que en el juego original
-  const pickups = [];
-  try {
-    const dv = new DataView(await fetchBuf(dir + T.id + '.fob'));
-    const n = dv.getInt32(0, true);
-    for (let i = 0; i < n; i++) {
-      const o = 4 + i * 56;
-      if (dv.getInt32(o, true) !== 30) continue;
-      pickups.push(new THREE.Vector3(...rv2three(dv.getFloat32(o + 20, true), dv.getFloat32(o + 24, true), dv.getFloat32(o + 28, true))));
-    }
-  } catch (e) {}
-  return { id: T.id, name: T.name, inf, zones, nZones, path, pickups, group: built.group, sky: skyGroup, bvh, bg, fog, far };
+  // línea de carrera de los rivales de la PC (nodos de IA del juego original)
+  let ai = null;
+  try { const fan = parseFAN(await fetchBuf(dir + T.id + '.fan')); if (fan.length > 2) ai = new AiPath(fan); } catch (e) {}
+  return { id: T.id, name: T.name, inf, zones, nZones, path, ai, pickups, group: built.group, sky: skyGroup, bvh, bg, fog, far };
 }
 
 function loadTrackCached(id) {
@@ -275,6 +305,10 @@ const G = {
   results: [], camMode: 0, online: false,
   prevPos: null, prevQuat: null, renderPos: new THREE.Vector3(), renderQuat: new THREE.Quaternion(),
   pathHint: { from: null }, // último tramo del recorrido donde estaba el auto
+  bots: [], // rivales de la computadora
+  botCount: Math.min(7, Math.max(1, +store.get('rv.bots', '3') || 3)),
+  botLaps: +store.get('rv.botlaps', '3') || 3,
+  botDiff: DIFFICULTY[store.get('rv.botdiff', 'normal')] ? store.get('rv.botdiff', 'normal') : 'normal',
 };
 let net = null;
 
@@ -318,9 +352,7 @@ async function spawnMyCar(slot = 0) {
   G.phys.place(s.pos, s.yaw);
 }
 
-function resetLaps() {
-  G.lap = { cur: track.nZones - 1, started: false, done: 0, lapStart: 0, best: null, finished: false, finishTime: 0, lastZoneT: 0 };
-}
+function resetLaps() { G.lap = newLap(); for (const b of G.bots) b.lap = newLap(); }
 
 // Punto más cercano del recorrido (nodos .pan) a una posición: tramo, avance en el tramo y distancia a la meta.
 // "hint" recuerda el último tramo: así el auto sigue el recorrido en orden y no "salta" a otra parte
@@ -392,10 +424,11 @@ function progressValue() {
   return L.done * 100 + (L.started ? L.cur + 1 : 0) + pathFraction() * 0.5;
 }
 
-function updateLaps(now) {
-  if (G.lap.finished || G.locked) return;
-  const p = G.phys.pos; const rv = [p.x, -p.y, -p.z];
-  const N = track.nZones, L = G.lap;
+// Avanza las zonas de vuelta (.taz) de un auto. Devuelve el tiempo de la vuelta cuando completa una.
+function lapTick(L, p, now) {
+  if (L.finished || G.locked) return null;
+  const rv = [p.x, -p.y, -p.z];
+  const N = track.nZones;
   for (const z of track.zones) {
     if (!zoneContains(z, rv)) continue;
     const want1 = (L.cur + 1) % N, want2 = (L.cur + 2) % N;
@@ -406,13 +439,27 @@ function updateLaps(now) {
       else {
         const lt = now - L.lapStart; L.lapStart = now; L.done++;
         if (L.best == null || lt < L.best) L.best = lt;
-        toast('Vuelta ' + L.done + ': ' + fmt(lt) + (L.best === lt ? ' · ¡mejor!' : ''));
-        audio.play('pickup', { vol: 0.8 });
-        if (G.mode === 'race' && L.done >= G.laps) finishRace(now);
+        return lt;
       }
     }
     break;
   }
+  return null;
+}
+function newLap() { return { cur: track.nZones - 1, started: false, done: 0, lapStart: 0, best: null, finished: false, finishTime: 0, lastZoneT: 0 }; }
+function updateLaps(now) {
+  const L = G.lap;
+  const lt = lapTick(L, G.phys.pos, now);
+  if (lt == null) return;
+  toast('Vuelta ' + L.done + ': ' + fmt(lt) + (L.best === lt ? ' · ¡mejor!' : ''));
+  audio.play('pickup', { vol: 0.8 });
+  if (G.mode === 'race' && L.done >= G.laps) finishRace(now);
+}
+// progreso de un rival de la PC (misma escala que progressValue)
+function botProgress(b) {
+  const L = b.lap;
+  if (L.finished) return 1e6 - L.finishTime / 1000;
+  return L.done * 100 + (L.started ? L.cur + 1 : 0) + pathFraction(b.phys.pos, b.driver.hint) * 0.5;
 }
 
 function finishRace(now) {
@@ -422,7 +469,11 @@ function finishRace(now) {
   net?.send({ t: 'finish', name: me.name, time: me.time });
   center('¡LLEGASTE!', 2000);
   audio.play('pickgen', { vol: 0.9 });
-  setTimeout(() => { if (G.mode === 'race') { G.mode = 'results'; show('scr-results'); } }, 2200);
+  setTimeout(() => {
+    if (G.mode !== 'race') return;
+    G.mode = 'results'; $('btn-res-back').textContent = G.online && net?.active ? 'Volver a la sala' : 'Volver al menú';
+    show('scr-results');
+  }, 2200);
 }
 
 function addResult(r) {
@@ -447,7 +498,7 @@ function startCountdown(now) {
 }
 
 async function startPractice() {
-  audio.unlock();
+  audio.unlock(); clearBots();
   await setTrack(G.trackId);
   await spawnMyCar(0);
   G.mode = 'practice'; G.online = false; G.laps = Infinity;
@@ -457,13 +508,125 @@ async function startPractice() {
 }
 
 async function startRace(laps, grid, trackId) {
-  audio.unlock();
+  audio.unlock(); clearBots();
   if (trackId) await setTrack(trackId);
   const idx = Math.max(0, grid.indexOf(net.myId));
   await spawnMyCar(idx);
   G.mode = 'race'; G.laps = laps;
   weapons.clearAll();
   show(null); startCountdown(performance.now());
+}
+
+// ---------- Carrera contra la computadora ----------
+// los rivales siguen los nodos de IA (.fan); si la pista no los tiene, el recorrido de posiciones (.pan)
+const botNav = {
+  locate: (pos, st) => { if (track.ai) return track.ai.locate(pos, st); st.pos = pos; return pathLocate(pos, st); },
+  ahead: (st, d) => track.ai ? track.ai.ahead(st, d) : pathAhead(st.pos, d, st),
+  dirAt: (st, d) => track.ai ? track.ai.dirAt(st, d) : pathDirAt(st.pos, d, st),
+  finishDist: st => track.ai ? track.ai.finishDist(st) : null,
+  get total() { return track.ai?.total || 1; },
+  // distancia a una pared (no piso ni rampa) en una dirección horizontal, o null
+  wall: (pos, dir, len) => {
+    const ray = new THREE.Ray(new THREE.Vector3(pos.x, pos.y + 30, pos.z), dir);
+    const h = world.bvh.raycastFirst(ray, THREE.DoubleSide, 0, len);
+    return h && Math.abs(h.face.normal.y) < 0.6 ? h.distance : null;
+  },
+};
+function clearBots() {
+  for (const b of G.bots) { b.vis?.dispose(); audio.removeRemote(b.id); }
+  G.bots = [];
+}
+async function startBotRace() {
+  audio.unlock();
+  await setTrack(G.trackId);
+  clearBots();
+  if (!track.path) { $('menu-status').textContent = 'Esta pista no tiene recorrido para los rivales.'; return; }
+  // rivales con autos distintos al tuyo (al azar)
+  const pool = manifest.cars.map(c => c.id).filter(id => id !== G.carId && carDefs.has(id));
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  const ids = Array.from({ length: G.botCount }, (_, i) => pool[i % pool.length]);
+  busy('Cargando rivales…');
+  try { await Promise.all(ids.map(id => ensureCar(id))); } catch (e) { busy(null); $('menu-status').textContent = 'No se pudieron cargar los rivales: ' + e.message; return; }
+  busy(null);
+  const D = DIFFICULTY[G.botDiff];
+  G.bots = ids.map((carId, i) => {
+    const cd = carDefs.get(carId);
+    const phys = new CarPhysics(cd.params, cd.box, world);
+    const s = gridSlot(i);
+    phys.place(s.pos, s.yaw);
+    const vis = new CarVisual(carId); vis.setName(cd.params.name);
+    const skill = D.skill + (Math.random() - 0.5) * 2 * D.spread;
+    return { id: 'bot' + i, carId, name: cd.params.name, phys, vis, driver: new BotDriver(phys, botNav, skill), lap: newLap(), prevPos: null, prevQuat: null, rpos: phys.pos.clone(), rquat: phys.quat.clone() };
+  });
+  // vos arrancás último, como en Re-Volt
+  await spawnMyCar(G.bots.length);
+  G.mode = 'race'; G.online = false; G.laps = G.botLaps;
+  G.myPlace = G.bots.length + 1; G.nPlace = G.bots.length + 1;
+  weapons.clearAll();
+  show(null); startCountdown(performance.now());
+}
+// si un rival se perdió o quedó trabado mucho rato, vuelve al recorrido
+function resetBotToPath(b) {
+  if (track.ai) {
+    track.ai.locate(b.phys.pos, b.driver.st);
+    const sp = track.ai.spawnPoint(b.driver.st, 250); // un poco más adelante, pasando lo que lo trababa
+    if (sp) {
+      const p = sp.pos.clone();
+      const hit = world.bvh.raycastFirst(new THREE.Ray(p.clone().add(new THREE.Vector3(0, 300, 0)), new THREE.Vector3(0, -1, 0)), THREE.DoubleSide, 0, 2000);
+      if (hit) p.y = hit.point.y + 30;
+      b.phys.place(p, Math.atan2(-sp.dir.x, -sp.dir.z));
+      b.prevPos = null; b.driver.lostT = 0; b.driver.stuckT = 0; b.driver.revT = 0;
+      return;
+    }
+  }
+  const loc = pathLocate(b.phys.pos, b.driver.hint); if (!loc) { b.phys.respawn(); return; }
+  const N = track.path.nodes, P3 = n => new THREE.Vector3(n.pos[0], -n.pos[1], -n.pos[2]);
+  const a = P3(N[loc.from]), c = P3(N[loc.to]);
+  const p = a.clone().lerp(c, loc.t), d = c.clone().sub(a);
+  const ray = new THREE.Ray(p.clone().add(new THREE.Vector3(0, 300, 0)), new THREE.Vector3(0, -1, 0));
+  const hit = world.bvh.raycastFirst(ray, THREE.DoubleSide, 0, 2000);
+  if (hit) p.y = hit.point.y + 30;
+  b.phys.place(p, Math.atan2(-d.x, -d.z));
+  b.prevPos = null; b.driver.lostT = 0; b.driver.stuckT = 0; b.driver.revT = 0;
+}
+function updateBots(now, dt) {
+  const racing = G.mode === 'race' && !G.locked;
+  const myLaps = G.lap.done + (G.lap.started ? pathFraction() : 0);
+  for (const b of G.bots) {
+    const L = b.lap, D = b.driver;
+    if (!racing || L.finished) {
+      // quieto en la grilla o ya llegó: frena despacio
+      b.phys.input = L.finished ? { throttle: 0.15, steer: D.think(dt).steer, handbrake: false } : { throttle: 0, steer: 0, handbrake: true };
+      continue;
+    }
+    // un poco de "goma": si te sacan mucha ventaja aflojan, si quedaron muy atrás aprietan
+    const botLaps = L.done + (L.started ? pathFraction(b.phys.pos, D.hint) : 0);
+    const diff = botLaps - myLaps;
+    D.band = diff > 0.15 ? Math.max(0.9, 1 - (diff - 0.15) * 0.25) : diff < -0.15 ? Math.min(1.08, 1 + (-diff - 0.15) * 0.25) : 1;
+    b.phys.input = D.think(dt);
+    if (D.lostT > 3) resetBotToPath(b);
+    const lt = lapTick(L, b.phys.pos, now);
+    if (lt != null && L.done >= G.laps) {
+      L.finished = true; L.finishTime = now - G.goTime;
+      addResult({ id: b.id, name: b.name, time: L.finishTime });
+      if (!G.lap.finished) toast(b.name + ' llegó: ' + fmt(L.finishTime));
+    }
+  }
+}
+// en las físicas: auto contra auto (vos y los rivales de la PC)
+function botCollisions() {
+  const cars = [{ id: net?.active ? net.myId : 'me', phys: G.phys }, ...G.bots];
+  const asOther = c => ({ pos: c.phys.pos, quat: c.phys.quat, vel: c.phys.vel, spheres: c.phys.carSpheres, mass: c.phys.mass });
+  for (let i = 0; i < cars.length; i++) for (let j = i + 1; j < cars.length; j++) {
+    const a = cars[i], b = cars[j];
+    if (a.phys.pos.distanceToSquared(b.phys.pos) > 400 * 400) continue;
+    const oa = asOther(a), ob = asOther(b);
+    const h1 = a.phys.collideWithCar(ob), h2 = b.phys.collideWithCar(oa);
+    const hit = Math.max(h1 || 0, h2 || 0);
+    if (hit > 300 && i === 0) audio.hit(Math.min(1, hit / 2000));
+    else if (hit > 300) audio.playAt('hit1', a.phys.pos, { vol: Math.min(1, hit / 2000) });
+    if (hit) { weapons.onCarContact(a.id, b.id); weapons.onCarContact(b.id, a.id); }
+  }
 }
 
 // ---------- Menú ----------
@@ -517,6 +680,20 @@ $('vol-sfx').addEventListener('input', e => { audio.unlock(); audio.setSfxVolume
 
 function getName() { const n = $('name').value.trim() || 'Piloto'; G.name = n; store.set('rv.name', n); return n; }
 
+// opciones de la carrera contra la PC
+function bindSel(id, cur, key, set) {
+  const el = $(id);
+  [...el.children].forEach(c => c.setAttribute('aria-pressed', c.dataset.v === String(cur)));
+  el.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    [...el.children].forEach(c => c.setAttribute('aria-pressed', c === b));
+    set(b.dataset.v); store.set(key, b.dataset.v); audio.play('menuupdown', { vol: 0.5 });
+  });
+}
+bindSel('botsel', G.botCount, 'rv.bots', v => { G.botCount = +v; });
+bindSel('botlaps', G.botLaps, 'rv.botlaps', v => { G.botLaps = +v; });
+bindSel('botdiff', G.botDiff, 'rv.botdiff', v => { G.botDiff = v; });
+$('btn-bots').onclick = () => { getName(); audio.unlock(); audio.play('menunext', { vol: 0.6 }); startBotRace(); };
 $('btn-practice').onclick = () => { getName(); audio.unlock(); audio.play('menunext', { vol: 0.6 }); startPractice(); };
 $('btn-host').onclick = async () => {
   const name = getName(); audio.unlock();
@@ -572,7 +749,7 @@ $('btn-quit').onclick = () => {
 function lobbySlot() { return net?.active ? Math.max(0, [...net.players.keys()].indexOf(net.myId)) : 0; }
 let lastLobbySlot = -1;
 
-function toMenu() { G.mode = 'menu'; G.locked = true; weapons.clearAll(); renderTrackButtons($('tracksel')); spawnMyCar(0); show('scr-menu'); }
+function toMenu() { G.mode = 'menu'; G.locked = true; weapons.clearAll(); clearBots(); $('btn-res-back').textContent = 'Volver a la sala'; renderTrackButtons($('tracksel')); spawnMyCar(0); show('scr-menu'); }
 
 // ---------- Selección de pista ----------
 function renderTrackButtons(el) {
@@ -719,14 +896,28 @@ function engineUrl(carId) { return carDef(carId)?.engine || 'sfx/moto.wav'; }
 function carTop(carId) { const P = carDefs.get(carId)?.params; return P ? (P.topEnd > 100 ? P.topEnd : P.topSpeed * 85.4) : 3000; }
 // ---------- Armas ----------
 // Lo que el sistema de armas necesita saber del juego
+function myCar() {
+  return G.phys ? { id: net?.active ? net.myId : 'me', isMe: true, phys: G.phys, pos: G.phys.pos, renderPos: G.renderPos, quat: G.phys.quat,
+    active: (G.mode === 'race' || G.mode === 'practice') && !G.locked && !G.lap.finished } : null;
+}
 const weapons = new Weapons(scene, audio, {
-  me: () => G.phys ? { id: net?.active ? net.myId : 'me', phys: G.phys, pos: G.phys.pos, renderPos: G.renderPos, quat: G.phys.quat,
-    active: (G.mode === 'race' || G.mode === 'practice') && !G.locked && !G.lap.finished } : null,
+  me: myCar,
+  // autos que se simulan en esta compu: vos y los rivales de la PC
+  locals: () => {
+    const me = myCar(); const list = me ? [me] : [];
+    const racing = G.mode === 'race' && !G.locked;
+    for (const b of G.bots) list.push({ id: b.id, isMe: false, phys: b.phys, pos: b.phys.pos, renderPos: b.rpos, quat: b.phys.quat, active: racing && !b.lap.finished, straight: b.driver.straight });
+    return list;
+  },
   others: () => G.others || [],
   send: msg => { if (net?.active) net.send(msg); },
   bvh: () => world?.bvh,
-  place: () => ({ place: G.myPlace || 1, total: G.nPlace || 1 }),
-  myProg: () => progressValue(),
+  place: id => {
+    if (!id || id === myCar()?.id) return { place: G.myPlace || 1, total: G.nPlace || 1 };
+    const b = G.bots.find(x => x.id === id);
+    return { place: b?.place || 1, total: G.nPlace || 1 };
+  },
+  prog: id => { const b = G.bots.find(x => x.id === id); return b ? botProgress(b) : progressValue(); },
   toast: msg => toast(msg),
   shake: a => { G.shake = Math.max(G.shake || 0, a); },
 });
@@ -823,8 +1014,8 @@ function broadcastRank() {
 
 // ---------- Aviso de curvas y tabla de posiciones ----------
 // Dirección de la pista (horizontal) en un punto a cierta distancia por delante, según los nodos del recorrido
-function pathDirAt(pos, dist) {
-  const a = pathAhead(pos, dist), b = pathAhead(pos, dist + 200);
+function pathDirAt(pos, dist, hint = G.pathHint) {
+  const a = pathAhead(pos, dist, hint), b = pathAhead(pos, dist + 200, hint);
   if (!a || !b) return null;
   const d = b.sub(a); d.y = 0;
   return d.lengthSq() > 1 ? d.normalize() : null;
@@ -876,6 +1067,7 @@ function updateStandings(now) {
     const pr = remoteProgress(r, now);
     list.push({ me: false, id, name: r.name || 'Piloto', prog: pr, fin: pr >= 1e5, lap: Math.floor(pr / 100) });
   }
+  for (const b of G.bots) { const pr = botProgress(b); list.push({ me: false, id: b.id, name: b.name, prog: pr, fin: b.lap.finished, lap: b.lap.done, bot: b }); }
   // Online se usa el orden que reparte el anfitrión, así todos ven la misma tabla.
   // Si todavía no llegó (o es viejo), se ordena con lo que se ve en esta compu.
   const rank = G.rank && now - G.rank.at < 1500 ? G.rank.order : null;
@@ -883,10 +1075,12 @@ function updateStandings(now) {
   else list.sort((a, b) => Math.abs(a.prog - b.prog) < 4e-4 ? (a.id < b.id ? -1 : 1) : b.prog - a.prog);
   const myPos = list.findIndex(x => x.me) + 1;
   G.myPlace = myPos; G.nPlace = list.length;
-  $('h-pos').textContent = others.length ? myPos + '°/' + list.length : '';
+  list.forEach((x, i) => { if (x.bot) x.bot.place = i + 1; });
+  const any = list.length > 1;
+  $('h-pos').textContent = any ? myPos + '°/' + list.length : '';
   const box = $('h-standings');
-  box.hidden = !others.length;
-  if (!others.length || now - standT < 150) return; // la tabla se redibuja ~7 veces por segundo
+  box.hidden = !any;
+  if (!any || now - standT < 150) return; // la tabla se redibuja ~7 veces por segundo
   standT = now;
   box.innerHTML = list.map((x, i) => {
     const info = x.fin ? 'LLEGÓ' : 'V' + Math.min(G.laps, x.lap + 1);
@@ -916,18 +1110,22 @@ function frame(now) {
   const inp = driving && !G.locked ? (window.__autoInput ? window.__autoInput() : readInput()) : { throttle: 0, steer: 0, handbrake: true };
   G.phys.input = inp;
 
+  if (G.bots.length) updateBots(now, dt);
   acc += dt;
   while (acc >= FIXED) {
     // guardar el estado anterior para interpolar el dibujo entre pasos de física
     G.prevPos = G.phys.pos.clone(); G.prevQuat = G.phys.quat.clone();
+    world.bvh.update?.(FIXED); // objetos que giran (la ruleta del casino)
     G.phys.step(FIXED);
+    for (const b of G.bots) { b.prevPos = b.phys.pos.clone(); b.prevQuat = b.phys.quat.clone(); b.phys.step(FIXED); }
+    if (G.bots.length && G.mode === 'race') botCollisions();
     // choques entre autos solo durante la carrera (en la sala los autos están quietos en la grilla)
     if (G.mode === 'race') for (const [id, r] of G.remotes) {
       if (!r.vis || !r.tpos || now - r.seen > 2000) continue;
       const cd = carDefs.get(r.carId); if (!cd?.spheres) continue;
       const hit = G.phys.collideWithCar({ pos: r.pos, quat: r.quat, vel: r.vel, spheres: cd.spheres, mass: cd.params.mass || 1.2 });
       if (hit > 300) audio.hit(Math.min(1, hit / 2000));
-      if (hit) weapons.onCarContact(id);
+      if (hit) weapons.onCarContact(net.myId, id);
     }
     acc -= FIXED;
   }
@@ -955,6 +1153,12 @@ function frame(now) {
     r.vis.setWheels(r.susp || [], r.steer || [], r.spin);
   }
 
+  for (const b of G.bots) {
+    if (b.prevPos && b.prevPos.distanceToSquared(b.phys.pos) < 500 * 500) { b.rpos.lerpVectors(b.prevPos, b.phys.pos, alpha); b.rquat.slerpQuaternions(b.prevQuat, b.phys.quat, alpha); }
+    else { b.rpos.copy(b.phys.pos); b.rquat.copy(b.phys.quat); }
+    b.vis.root.position.copy(b.rpos); b.vis.root.quaternion.copy(b.rquat);
+    b.vis.setWheels(b.phys.wheels.map(w => w.suspOffset), b.phys.wheels.map(w => w.steerAngle || 0), b.phys.wheels.map(w => w.spin));
+  }
   if (driving) updateLaps(now);
   G.others = [];
   for (const [id, r] of G.remotes) {
@@ -1004,6 +1208,10 @@ function frame(now) {
       if (!audio.remotes.has(id)) audio.addRemote(id, engineUrl(r.carId));
       audio.updateRemote(id, r.pos, r.vel.length() / carTop(r.carId), r.vis.root.visible);
     }
+    for (const b of G.bots) {
+      if (!audio.remotes.has(b.id)) audio.addRemote(b.id, engineUrl(b.carId));
+      audio.updateRemote(b.id, b.rpos, Math.abs(b.phys.fwdSpeed) / b.phys.top, true);
+    }
     const fw = camera.getWorldDirection(_camFw), up = _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
     audio.updateListener(camera.position, fw, up);
   }
@@ -1037,7 +1245,21 @@ async function boot() {
     await spawnMyCar(0);
     G.mode = 'menu'; show('scr-menu');
     $('loading').hidden = true;
-    window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate, audio, weapons, THREE, gridSlot };
+    // solo para pruebas: simula a los rivales más rápido que el tiempo real, sin dibujar
+    window.__simBots = (sec, now, log) => {
+      const n = Math.round(sec * 60);
+      for (let i = 0; i < n; i++) {
+        now += 1000 / 60;
+        updateBots(now, FIXED);
+        world.bvh.update?.(FIXED);
+        for (const b of G.bots) b.phys.step(FIXED);
+        botCollisions();
+        weapons.update(FIXED, now);
+        if (log && i % 30 === 0) log.push(G.bots.map(b => [Math.round(b.phys.pos.x), Math.round(b.phys.pos.z), Math.round(b.phys.fwdSpeed), b.lap.cur, b.lap.done]));
+      }
+      return now;
+    };
+    window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate, audio, weapons, THREE, gridSlot, startBotRace, botProgress, TUNE };
   } catch (e) {
     console.error(e);
     $('loadmsg').textContent = 'No se pudo cargar: ' + e.message + '. Si abriste el archivo con doble clic, tiene que estar subido a una página web (ver LEEME).';

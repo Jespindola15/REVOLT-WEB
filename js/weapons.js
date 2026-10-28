@@ -64,8 +64,7 @@ export class Weapons {
     this.root = new THREE.Group(); scene.add(this.root);
     this.ready = false;
     this.pickups = []; this.proj = []; this.parts = []; this.auras = new Map();
-    this.held = null; this.shots = 0; this.seq = 0;
-    this.bomb = null; this.bombCD = 0; this.pulse = 0; this.zapCD = 0;
+    this.states = new Map(); this.seq = 0;
     this.maps = new Map(); this.pages = [];
     this.trailT = 0;
   }
@@ -112,6 +111,19 @@ export class Weapons {
     return s;
   }
 
+  // ---------- Estado de armas de cada auto que se simula en esta compu (vos y los rivales de la PC) ----------
+  st(id) {
+    let s = this.states.get(id);
+    if (!s) { s = { held: null, shots: 0, bomb: null, bombCD: 0, pulse: 0, zapCD: 0, fuseT: 0, aiT: 0 }; this.states.set(id, s); }
+    return s;
+  }
+  mine() { const me = this.host.me(); return this.st(me ? me.id : 'me'); }
+  get held() { return this.mine().held; }
+  get shots() { return this.mine().shots; }
+  get bomb() { return this.mine().bomb; }
+  get pulse() { return this.mine().pulse; }
+  local(id) { return this.host.locals().find(c => c.id === id); }
+
   // ---------- Bonus en la pista ----------
   setTrack(T) {
     this.clearAll();
@@ -128,26 +140,29 @@ export class Weapons {
     });
   }
 
-  takePickup(i, mine) {
+  // car: auto local que lo agarró (null si lo agarró alguien en otra compu)
+  takePickup(i, car) {
     const p = this.pickups[i]; if (!p || p.wait > 0) return;
     p.wait = PICKUP_RESPAWN; p.obj.visible = false;
     for (let k = 0; k < 6; k++) this.part(CELL.spark, p.pos, { vel: new THREE.Vector3((Math.random() - 0.5) * 500, 200 + Math.random() * 400, (Math.random() - 0.5) * 500), life: 0.5, size: 30, size1: 5, color: 0xffd060 });
-    if (!mine) return;
-    const { place, total } = this.host.place();
-    this.held = pickWeapon(place, total); this.shots = WEAPONS[this.held].shots;
-    this.audio.play('pickup', { vol: 0.8 });
+    if (!car) return;
+    const s = this.st(car.id);
+    const { place, total } = this.host.place(car.id);
+    s.held = pickWeapon(place, total); s.shots = WEAPONS[s.held].shots;
+    s.aiT = 0.6 + Math.random() * 1.6; // los rivales de la PC esperan un poquito antes de usarla
+    if (car.isMe) this.audio.play('pickup', { vol: 0.8 });
+    else this.audio.playAt('pickup', p.pos, { vol: 0.6 });
     this.host.send({ t: 'pk', i });
   }
 
   // limpia todo lo que está en juego (al empezar una carrera o volver al menú)
   clearAll() {
     for (const p of this.proj) this.disposeObj(p.obj);
-    for (const p of this.parts) { this.root.remove(p.s); p.s.material.dispose(); }
+    for (const p of this.parts) { this.root.remove(p.s); if (p.frames) p.s.material.map.dispose(); p.s.material.dispose(); }
     for (const a of this.auras.values()) this.root.remove(a.grp);
-    this.proj = []; this.parts = []; this.auras.clear();
-    this.held = null; this.shots = 0; this.bomb = null; this.pulse = 0;
+    this.proj = []; this.parts = []; this.auras.clear(); this.states.clear();
     for (const p of this.pickups) { p.wait = 0; p.obj.visible = true; }
-    this.reticle && (this.reticle.visible = false);
+    if (this.reticle) this.reticle.visible = false;
   }
   disposeObj(o) { if (o) this.root.remove(o); }
 
@@ -184,63 +199,95 @@ export class Weapons {
     for (let k = 0; k < 5; k++) this.part(CELL.smoke, pos, { vel: new THREE.Vector3((Math.random() - 0.5) * 300, 150 + Math.random() * 200, (Math.random() - 0.5) * 300), life: 1.2, size: 90 * size, size1: 260 * size, color: 0x707070, opacity: 0.6 });
   }
 
+  // todos los autos de la carrera (locales y de otras compus), para choques y blancos
+  allCars() {
+    const list = this.host.others().filter(o => o.visible).map(o => ({ id: o.id, pos: o.pos, vel: o.vel, quat: o.quat, fx: o.fx | 0, remote: true }));
+    for (const c of this.host.locals()) list.push({ id: c.id, pos: c.pos, vel: c.phys.vel, quat: c.quat, local: c, fx: this.fxBits(c) });
+    return list;
+  }
+
   // ---------- Disparar ----------
   // auto del frente más cercano para los cohetes (dentro de un cono hacia adelante)
-  findTarget(me) {
-    const fwd = _v.set(0, 0, -1).applyQuaternion(me.quat); fwd.y = 0; fwd.normalize();
+  findTarget(car, maxDist = 7000, minCos = 0.55) {
+    const fwd = _v.set(0, 0, -1).applyQuaternion(car.quat); fwd.y = 0; fwd.normalize();
     let best = null, bs = Infinity;
-    for (const o of this.host.others()) {
-      if (!o.visible) continue;
-      const d = _w.copy(o.pos).sub(me.pos); const dist = d.length();
-      if (dist < 60 || dist > 7000) continue;
+    for (const o of this.allCars()) {
+      if (o.id === car.id) continue;
+      const d = _w.copy(o.pos).sub(car.pos); const dist = d.length();
+      if (dist < 60 || dist > maxDist) continue;
       d.y = 0; const cos = d.normalize().dot(fwd);
-      if (cos < 0.55) continue;
+      if (cos < minCos) continue;
       const score = dist * (2 - cos);
       if (score < bs) { bs = score; best = o.id; }
     }
     return best;
   }
+  // ¿hay un auto atrás, cerca? (para el aceite y la bola)
+  someoneBehind(car, maxDist) {
+    const fwd = _v.set(0, 0, -1).applyQuaternion(car.quat); fwd.y = 0; fwd.normalize();
+    return this.allCars().some(o => {
+      if (o.id === car.id) return false;
+      const d = _w.copy(o.pos).sub(car.pos); const dist = d.length(); if (dist > maxDist || dist < 1) return false;
+      d.y = 0; return d.normalize().dot(fwd) < -0.6;
+    });
+  }
+  nearest(car) {
+    let best = Infinity;
+    for (const o of this.allCars()) if (o.id !== car.id) best = Math.min(best, o.pos.distanceTo(car.pos));
+    return best;
+  }
 
-  fire() {
-    const me = this.host.me();
-    if (!this.ready || !me?.active || !this.held) return;
-    const k = this.held;
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(me.quat);
+  fire(car = this.host.me()) {
+    if (!this.ready || !car?.active) return;
+    const s = this.st(car.id);
+    const k = s.held; if (!k) return;
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(car.quat);
     const flat = fwd.clone(); flat.y = 0; flat.normalize();
-    const front = me.pos.clone().addScaledVector(fwd, 70).addScaledVector(UP, 25);
-    const sid = me.id + ':' + (++this.seq);
+    const front = car.pos.clone().addScaledVector(fwd, 70).addScaledVector(UP, 25);
+    const sid = car.id + ':' + (++this.seq);
+    const snd = (name, vol) => car.isMe ? this.audio.play(name, { vol }) : this.audio.playAt(name, car.pos, { vol });
     const shoot = (kind, p, v, tg = null) => {
-      this.spawn(kind, me.id, sid, p, v, tg);
+      this.spawn(kind, car.id, sid, p, v, tg);
       this.host.send({ t: 'wf', k: kind, sid, p: arr(p), v: arr(v), tg });
     };
     if (k === 'firework' || k === 'fireworks') {
-      shoot('rocket', front, flat.clone().multiplyScalar(3800), this.findTarget(me));
-      this.audio.play('firefire', { vol: 0.9 });
+      shoot('rocket', front, flat.clone().multiplyScalar(3800), this.findTarget(car));
+      snd('firefire', 0.9);
     } else if (k === 'shockwave') {
-      shoot('shock', me.pos.clone().addScaledVector(flat, 80), flat.clone().multiplyScalar(3000));
-      this.audio.play('shockfire', { vol: 0.9 });
+      shoot('shock', car.pos.clone().addScaledVector(flat, 80), flat.clone().multiplyScalar(3000));
+      snd('shockfire', 0.9);
     } else if (k === 'water') {
-      const v = me.phys.vel.clone().add(flat.clone().multiplyScalar(1700)).addScaledVector(UP, 650);
+      const v = car.phys.vel.clone().add(flat.clone().multiplyScalar(1700)).addScaledVector(UP, 650);
       shoot('water', front, v);
-      this.audio.play('wbombfire', { vol: 0.8 });
+      snd('wbombfire', 0.8);
     } else if (k === 'oil') {
-      shoot('oil', me.pos.clone().addScaledVector(flat, -90), new THREE.Vector3());
-      this.audio.play('oildrop', { vol: 0.9 });
+      shoot('oil', car.pos.clone().addScaledVector(flat, -90), new THREE.Vector3());
+      snd('oildrop', 0.9);
     } else if (k === 'ball') {
-      shoot('ball', front, me.phys.vel.clone().add(flat.clone().multiplyScalar(700)));
-      this.audio.play('balldrop', { vol: 0.9 });
+      shoot('ball', front, car.phys.vel.clone().add(flat.clone().multiplyScalar(700)));
+      snd('balldrop', 0.9);
     } else if (k === 'turbo') {
-      me.phys.fx.turbo = 4; this.audio.play('turbo', { vol: 0.9 });
+      car.phys.fx.turbo = 4; snd('turbo', 0.9);
     } else if (k === 'electro') {
-      this.pulse = 6; this.audio.play('electro', { vol: 0.8 });
+      s.pulse = 6; snd('electro', 0.8);
     } else if (k === 'putty') {
-      this.bomb = { left: 5 }; this.bombCD = 0.8; this.fuseT = 0; this.audio.play('fuse', { vol: 0.8 });
+      s.bomb = { left: 5 }; s.bombCD = 0.8; s.fuseT = 0; snd('fuse', 0.8);
     } else if (k === 'star') {
-      this.host.send({ t: 'gp', pr: this.host.myProg() });
-      this.part(CELL.bigring, me.pos, { life: 0.9, size: 200, size1: 4000, color: 0xffe080 });
-      this.audio.play('starfire', { vol: 1 });
+      const pr = this.host.prog(car.id);
+      this.host.send({ t: 'gp', pr });
+      this.globalPulse(car.id, pr);
+      this.part(CELL.bigring, car.pos, { life: 0.9, size: 200, size1: 4000, color: 0xffe080 });
+      snd('starfire', 1);
     }
-    if (--this.shots <= 0) { this.held = null; this.shots = 0; }
+    if (--s.shots <= 0) { s.held = null; s.shots = 0; }
+  }
+
+  // pulso global: electrocuta a los autos locales que van adelante del que lo usó
+  globalPulse(fromId, pr) {
+    for (const c of this.host.locals()) {
+      if (c.id === fromId || !c.active) continue;
+      if (this.host.prog(c.id) > pr) { this.zap(c, 3.2); if (c.isMe) this.host.toast('¡PULSO GLOBAL!'); }
+    }
   }
 
   spawn(kind, owner, sid, p, v, tg) {
@@ -275,39 +322,32 @@ export class Weapons {
     this.proj.push(pr);
   }
 
-  // ---------- Golpes al auto propio ----------
-  hitMe(kind, from, dir) {
-    const me = this.host.me(); if (!me?.active) return;
-    const P = me.phys;
+  // ---------- Golpes a los autos locales ----------
+  hitCar(c, kind, from, dir) {
+    if (!c?.active) return;
+    const P = c.phys;
     if (kind === 'boom') {
-      const d = me.pos.distanceTo(from); if (d > 300) return;
+      const d = c.pos.distanceTo(from); if (d > 300) return;
       const f = 1 - d / 300;
-      const out = me.pos.clone().sub(from); out.y = 0; if (out.lengthSq() < 1) out.set(1, 0, 0); out.normalize();
+      const out = c.pos.clone().sub(from); out.y = 0; if (out.lengthSq() < 1) out.set(1, 0, 0); out.normalize();
       P.blast(out.multiplyScalar(650 * f).addScaledVector(UP, 1500 * f), 7 * f);
-      this.host.shake?.(0.5 * f);
+      if (c.isMe) this.host.shake?.(0.5 * f);
     } else if (kind === 'shock') {
       P.blast(dir.clone().multiplyScalar(2100).addScaledVector(UP, 1050), 9);
-      this.host.shake?.(0.6);
+      if (c.isMe) this.host.shake?.(0.6);
     } else if (kind === 'splash') {
-      const d = me.pos.distanceTo(from); if (d > 210) return;
+      const d = c.pos.distanceTo(from); if (d > 210) return;
       const f = 1 - d / 210;
       P.vel.x *= 1 - 0.65 * f; P.vel.z *= 1 - 0.65 * f;
       P.blast(new THREE.Vector3(0, 650 * f, 0), 4 * f);
     }
   }
-
-  carsNear() {
-    const me = this.host.me();
-    const list = this.host.others().filter(o => o.visible);
-    if (me) list.push({ id: me.id, pos: me.pos, vel: me.phys.vel, me: true });
-    return list;
-  }
+  hitLocals(kind, from, dir) { for (const c of this.host.locals()) this.hitCar(c, kind, from, dir); }
 
   updateProj(dt) {
     const bvh = this.host.bvh(); if (!bvh) return;
-    const me = this.host.me();
-    const cars = this.carsNear();
-    const myId = me?.id;
+    const cars = this.allCars();
+    const locals = this.host.locals();
     const canHit = (pr, c) => !(c.id === pr.owner && pr.t < 0.35);
     for (const pr of this.proj) {
       if (pr.dead) continue;
@@ -352,7 +392,7 @@ export class Weapons {
         pr.ball.material.rotation += dt * 8;
         const c = cars.find(c => canHit(pr, c) && segDist(from, pr.pos, c.pos) < 125);
         if (c) {
-          if (c.id === myId) this.hitMe('shock', pr.pos, dir);
+          if (c.local) this.hitCar(c.local, 'shock', pr.pos, dir.clone());
           this.audio.playAt('shock', pr.pos, { vol: 1 });
           this.part(CELL.ring, pr.pos, { life: 0.4, size: 120, size1: 500, color: 0x80c0ff });
           this.kill(pr); continue;
@@ -370,24 +410,25 @@ export class Weapons {
         if (c || pr.t > 5) { this.splash(pr, pr.pos); continue; }
         pr.obj.position.copy(pr.pos); pr.obj.rotation.x += dt * 6; pr.obj.rotation.z += dt * 4;
       } else if (pr.kind === 'oil') {
-        if (me?.active) {
-          const dx = me.pos.x - pr.pos.x, dz = me.pos.z - pr.pos.z;
-          if (dx * dx + dz * dz < 105 * 105 && Math.abs(me.pos.y - pr.pos.y) < 90) {
-            if (me.phys.fx.oil <= 0) this.audio.play('skid_rough', { vol: 0.7 });
-            me.phys.fx.oil = 0.9;
+        for (const c of locals) {
+          if (!c.active) continue;
+          const dx = c.pos.x - pr.pos.x, dz = c.pos.z - pr.pos.z;
+          if (dx * dx + dz * dz < 105 * 105 && Math.abs(c.pos.y - pr.pos.y) < 90) {
+            if (c.phys.fx.oil <= 0 && c.isMe) this.audio.play('skid_rough', { vol: 0.7 });
+            c.phys.fx.oil = 0.9;
           }
         }
         if (pr.t > 25) this.kill(pr);
         else if (pr.t > 23) pr.obj.material = this.oilFade || (this.oilFade = this.oilMat.clone(), this.oilFade.opacity = 0.4, this.oilFade);
       } else if (pr.kind === 'ball') {
-        this.updateBall(pr, dt, bvh, cars, me);
+        this.updateBall(pr, dt, bvh, cars);
         if (pr.t > 20) { this.fizzle(pr, pr.pos); continue; }
       }
     }
     if (this.proj.some(p => p.dead)) this.proj = this.proj.filter(p => !p.dead);
   }
 
-  updateBall(pr, dt, bvh, cars, me) {
+  updateBall(pr, dt, bvh, cars) {
     const R = pr.R, target = { point: new THREE.Vector3(), distance: 0, faceIndex: 0 };
     const sub = 3, h = dt / sub;
     for (let i = 0; i < sub; i++) {
@@ -410,9 +451,9 @@ export class Weapons {
       pr.pos.addScaledVector(n, (minD - d) * 0.5);
       const vr = _v.copy(pr.vel).sub(c.vel).dot(n);
       if (vr < 0) pr.vel.addScaledVector(n, -vr * 1.5);
-      if (c.me && me?.active) {
-        const hit = me.phys.collideWithCar({ pos: pr.pos, quat: new THREE.Quaternion(), vel: pr.vel, spheres: [{ c: new THREE.Vector3(), r: R }], mass: 3 });
-        if (hit > 300) this.audio.hit(Math.min(1, hit / 1500));
+      if (c.local?.active) {
+        const hit = c.local.phys.collideWithCar({ pos: pr.pos, quat: new THREE.Quaternion(), vel: pr.vel, spheres: [{ c: new THREE.Vector3(), r: R }], mass: 3 });
+        if (hit > 300 && c.local.isMe) this.audio.hit(Math.min(1, hit / 1500));
       }
     }
     pr.obj.position.copy(pr.pos);
@@ -425,93 +466,119 @@ export class Weapons {
     const p = at.clone(); this.kill(pr);
     this.explosion(p, 1);
     this.audio.playAt('firebang', p, { vol: 1 });
-    this.hitMe('boom', p);
+    this.hitLocals('boom', p);
   }
   splash(pr, at) {
     const p = at.clone(); this.kill(pr);
     for (let k = 0; k < 8; k++) this.part(CELL.puff, p, { vel: new THREE.Vector3((Math.random() - 0.5) * 600, 300 + Math.random() * 400, (Math.random() - 0.5) * 600), grav: 1800, life: 0.7, size: 50, size1: 110, color: 0x7fb4ff, opacity: 0.8 });
     this.audio.playAt('wbombhit', p, { vol: 1 });
-    this.hitMe('splash', p);
+    this.hitLocals('splash', p);
   }
   fizzle(pr, at) {
     const p = at.clone(); this.kill(pr);
     this.part(CELL.puff, p, { life: 0.5, size: 80, size1: 200, color: 0xa0c0ff, opacity: 0.7 });
   }
 
-  // ---------- Efectos sobre el auto propio ----------
-  myFxBits() {
-    const me = this.host.me(); if (!me) return 0;
-    return (this.pulse > 0 ? FX_PULSE : 0) | (me.phys.fx.zap > 0 ? FX_ZAP : 0) | (this.bomb ? FX_BOMB : 0) | (me.phys.fx.turbo > 0 ? FX_TURBO : 0);
+  // ---------- Efectos ----------
+  fxBits(c) {
+    if (!c) return 0;
+    const s = this.st(c.id);
+    return (s.pulse > 0 ? FX_PULSE : 0) | (c.phys.fx.zap > 0 ? FX_ZAP : 0) | (s.bomb ? FX_BOMB : 0) | (c.phys.fx.turbo > 0 ? FX_TURBO : 0);
+  }
+  myFxBits() { return this.fxBits(this.host.me()); }
+
+  // dos autos se tocaron (lo llama main.js): si el local tiene la bomba, se la pasa al otro
+  onCarContact(fromId, otherId) {
+    const s = this.st(fromId);
+    if (!s.bomb || s.bombCD > 0) return;
+    const other = this.local(otherId);
+    if (other) {
+      const so = this.st(otherId);
+      if (so.bomb) return;
+      so.bomb = { left: Math.max(1.5, s.bomb.left) }; so.bombCD = 0.8;
+      if (other.isMe) this.host.toast('¡Te pasaron la bomba! Chocá a alguien');
+    } else this.host.send({ t: 'pb', to: otherId, left: s.bomb.left });
+    s.bomb = null;
+    if (this.local(fromId)?.isMe) this.host.toast('¡Le pasaste la bomba!');
   }
 
-  // un rival chocó con mi auto (lo llama main.js): si tengo la bomba, se la paso
-  onCarContact(otherId) {
-    if (!this.bomb || this.bombCD > 0) return;
-    this.host.send({ t: 'pb', to: otherId, left: this.bomb.left });
-    this.bomb = null;
-    this.host.toast('¡Le pasaste la bomba!');
+  zap(c, sec) {
+    if (!c?.active) return;
+    if (c.phys.fx.zap <= 0) c.isMe ? this.audio.play('electrozap', { vol: 0.9 }) : this.audio.playAt('electrozap', c.pos, { vol: 0.7 });
+    c.phys.fx.zap = Math.max(c.phys.fx.zap, sec);
   }
 
-  zapMe(sec) {
-    const me = this.host.me(); if (!me?.active) return;
-    if (me.phys.fx.zap <= 0) this.audio.play('electrozap', { vol: 0.9 });
-    me.phys.fx.zap = Math.max(me.phys.fx.zap, sec);
-  }
-
-  updateSelf(dt) {
-    const me = this.host.me();
-    if (this.bombCD > 0) this.bombCD -= dt;
-    if (this.zapCD > 0) this.zapCD -= dt;
-    if (this.pulse > 0) this.pulse = Math.max(0, this.pulse - dt);
-    if (!me?.active) return;
-    if (this.bomb) {
-      this.bomb.left -= dt;
-      if ((this.fuseT = (this.fuseT || 0) - dt) <= 0) { this.fuseT = 1; this.audio.play('fuse', { vol: 0.5 }); }
-      if (this.bomb.left <= 0) {
-        this.bomb = null;
-        const p = me.pos.clone().addScaledVector(UP, 20);
+  updateLocal(c, dt, cars) {
+    const s = this.st(c.id);
+    if (s.bombCD > 0) s.bombCD -= dt;
+    if (s.zapCD > 0) s.zapCD -= dt;
+    if (s.pulse > 0) s.pulse = Math.max(0, s.pulse - dt);
+    if (!c.active) return;
+    if (s.bomb) {
+      s.bomb.left -= dt;
+      if ((s.fuseT -= dt) <= 0) { s.fuseT = 1; c.isMe ? this.audio.play('fuse', { vol: 0.5 }) : this.audio.playAt('fuse', c.pos, { vol: 0.4 }); }
+      if (s.bomb.left <= 0) {
+        s.bomb = null;
+        const p = c.pos.clone().addScaledVector(UP, 20);
         this.explosion(p, 1.4);
         this.audio.playAt('puttbang', p, { vol: 1 });
         this.host.send({ t: 'wb', p: arr(p) });
-        me.phys.blast(new THREE.Vector3((Math.random() - 0.5) * 500, 1900, (Math.random() - 0.5) * 500), 10);
-        this.host.shake?.(0.8);
+        c.phys.blast(new THREE.Vector3((Math.random() - 0.5) * 500, 1900, (Math.random() - 0.5) * 500), 10);
+        if (c.isMe) this.host.shake?.(0.8);
       }
     }
-    // pulso eléctrico de un rival cerca: se apaga el motor
-    for (const o of this.host.others()) {
-      if (!o.visible || !(o.fx & FX_PULSE)) continue;
-      if (o.pos.distanceTo(me.pos) < 430 && this.zapCD <= 0) { this.zapMe(2.2); this.zapCD = 2.6; }
+    // pulso eléctrico de otro auto cerca: se apaga el motor
+    for (const o of cars) {
+      if (o.id === c.id || !(o.fx & FX_PULSE)) continue;
+      if (o.pos.distanceTo(c.pos) < 430 && s.zapCD <= 0) { this.zap(c, 2.2); s.zapCD = 2.6; }
+    }
+    // rivales de la PC: deciden cuándo usar el arma
+    if (!c.isMe && s.held) {
+      if ((s.aiT -= dt) > 0) return;
+      const k = s.held;
+      let go = false;
+      if (k === 'firework' || k === 'fireworks') go = !!this.findTarget(c, 5000);
+      else if (k === 'shockwave') go = !!this.findTarget(c, 1800, 0.85);
+      else if (k === 'water') go = !!this.findTarget(c, 1100, 0.8);
+      else if (k === 'oil' || k === 'ball') go = this.someoneBehind(c, 1300);
+      else if (k === 'electro') go = this.nearest(c) < 700;
+      else if (k === 'turbo') go = c.straight !== false;
+      else go = true; // bomba y estrella
+      if (!go && s.aiT < -12) go = true; // no guardarla para siempre
+      if (go) { this.fire(c); s.aiT = 0.5 + Math.random(); }
     }
   }
 
   // ---------- Red ----------
   onNet(d) {
     if (!this.ready) return;
-    const myId = this.host.me()?.id;
-    if (d.t === 'pk') this.takePickup(d.i, false);
+    const me = this.host.me();
+    if (d.t === 'pk') this.takePickup(d.i, null);
     else if (d.t === 'wf') {
-      if (d.id === myId || !WEAPON_KINDS.has(d.k)) return;
+      if (!WEAPON_KINDS.has(d.k) || this.local(d.id)) return;
       this.spawn(d.k, d.id, d.sid, vec(d.p), vec(d.v), d.tg ?? null);
       const p = vec(d.p);
       this.audio.playAt({ rocket: 'firefire', shock: 'shockfire', water: 'wbombfire', oil: 'oildrop', ball: 'balldrop' }[d.k], p, { vol: 0.9 });
     } else if (d.t === 'pb') {
-      if (d.to === myId && !this.bomb) { this.bomb = { left: Math.max(1.5, +d.left || 3) }; this.bombCD = 0.8; this.host.toast('¡Te pasaron la bomba! Chocá a alguien'); }
+      const c = this.local(d.to);
+      if (c && !this.st(c.id).bomb) {
+        const s = this.st(c.id); s.bomb = { left: Math.max(1.5, +d.left || 3) }; s.bombCD = 0.8;
+        if (c.isMe) this.host.toast('¡Te pasaron la bomba! Chocá a alguien');
+      }
     } else if (d.t === 'wb') {
       // explotó la bomba de otro jugador: solo el efecto (el golpe ya se lo dio él mismo)
       const p = vec(d.p); this.explosion(p, 1.4); this.audio.playAt('puttbang', p, { vol: 1 });
     } else if (d.t === 'gp') {
-      // pulso global: electrocuta a todos los que van adelante del que lo usó
-      const me = this.host.me();
-      if (me?.active && this.host.myProg() > (+d.pr || 0)) { this.zapMe(3.2); this.host.toast('¡PULSO GLOBAL!'); }
+      this.globalPulse(d.id, +d.pr || 0);
       this.audio.play('starfire', { vol: 0.6 });
     }
+    void me;
   }
 
   // ---------- Dibujo de efectos en los autos ----------
   updateAuras(dt, now) {
-    const me = this.host.me();
     const list = this.host.others().map(o => ({ id: o.id, pos: o.pos, bits: o.visible ? o.fx | 0 : 0 }));
-    if (me) list.push({ id: me.id, pos: me.renderPos || me.pos, bits: this.myFxBits() });
+    for (const c of this.host.locals()) list.push({ id: c.id, pos: c.renderPos || c.pos, bits: this.fxBits(c) });
     const seen = new Set();
     for (const c of list) {
       seen.add(c.id);
@@ -540,24 +607,29 @@ export class Weapons {
 
   update(dt, now) {
     if (!this.ready) return;
-    const me = this.host.me();
+    const locals = this.host.locals();
     // bonus: giran, flotan y reaparecen
     for (const p of this.pickups) {
       if (p.wait > 0) { p.wait -= dt; if (p.wait <= 0) { p.obj.visible = true; } continue; }
       p.obj.rotation.y += dt * 2.2;
       p.obj.position.y = p.pos.y + Math.sin(now / 400 + p.ph) * 6;
       p.glow.material.opacity = 0.55 + Math.sin(now / 180 + p.ph) * 0.25;
-      if (me?.active && !this.held && !this.bomb && me.pos.distanceTo(p.pos) < PICK_RADIUS) this.takePickup(p.i, true);
+      for (const c of locals) {
+        const s = this.st(c.id);
+        if (c.active && !s.held && !s.bomb && c.pos.distanceTo(p.pos) < PICK_RADIUS) { this.takePickup(p.i, c); break; }
+      }
     }
-    this.updateSelf(dt);
+    const cars = this.allCars();
+    for (const c of locals) this.updateLocal(c, dt, cars);
     this.updateProj(dt);
     this.updateParts(dt);
     this.updateAuras(dt, now);
     // mira sobre el auto que van a perseguir los cohetes
     if (!this.reticle) { this.reticle = this.sprite(CELL.reticle, { size: 110, color: 0xff4040, additive: false }); this.reticle.visible = false; this.root.add(this.reticle); }
+    const me = this.host.me();
     const aiming = me?.active && (this.held === 'firework' || this.held === 'fireworks');
     const tid = aiming ? this.findTarget(me) : null;
-    const t = tid != null ? this.host.others().find(o => o.id === tid) : null;
+    const t = tid != null ? cars.find(o => o.id === tid) : null;
     this.reticle.visible = !!t;
     if (t) { this.reticle.position.copy(t.pos).addScaledVector(UP, 25); this.reticle.material.rotation += dt * 2; }
   }
