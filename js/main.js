@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import { parsePRM, parseW, parseFIN, parseTAZ, parseINF, parseCarParams, parsePAN, zoneContains, rv2three } from './rvformats.js';
 import { loadTexture, makeMaterials, buildMeshes } from './build.js';
-import { CarPhysics, MPH_PER_UNIT } from './physics.js';
+import { CarPhysics, MPH_PER_UNIT, carSpheresFromBox } from './physics.js';
 import { Net } from './net.js';
 
 THREE.ColorManagement.enabled = false;
@@ -115,6 +115,7 @@ async function setTrack(id) {
       scene.background = T.bg; scene.fog = T.fog;
       camera.far = Math.max(32000, T.far + 4000); camera.updateProjectionMatrix();
       track = T; world = { bvh: T.bvh };
+      G.pathHint = { from: null };
     }
     G.trackId = def.id;
     return T;
@@ -165,6 +166,7 @@ function ensureCar(id) {
     await Promise.all(Object.entries(def.models).map(async ([i, fn]) => { prms[i] = parsePRM(await fetchBuf(dir + fn)); }));
     cd.body = buildMeshes([{ polys: prms[0].polys, verts: prms[0].verts }], getMat).group;
     cd.box = new THREE.Box3().setFromObject(cd.body);
+    cd.spheres = carSpheresFromBox(cd.box);
     cd.wheels = [1, 2, 3, 4].map(i => prms[i] ? buildMeshes([{ polys: prms[i].polys, verts: prms[i].verts }], getMat).group : null);
     return cd;
   })().catch(e => { cd.loading = null; throw e; });
@@ -257,6 +259,7 @@ const G = {
   remotes: new Map(), // id -> {vis, carId, name, pos, quat, vel, tpos, tquat, prog, fin}
   results: [], camMode: 0, online: false,
   prevPos: null, prevQuat: null, renderPos: new THREE.Vector3(), renderQuat: new THREE.Quaternion(),
+  pathHint: { from: null }, // último tramo del recorrido donde estaba el auto
 };
 let net = null;
 
@@ -294,6 +297,7 @@ async function spawnMyCar(slot = 0) {
   G.phys.steerGain = G.steerSens / 100;
   G.vis = new CarVisual(G.carId);
   G.prevPos = null;
+  G.pathHint = { from: null };
   const s = gridSlot(slot);
   G.phys.place(s.pos, s.yaw);
 }
@@ -302,39 +306,51 @@ function resetLaps() {
   G.lap = { cur: track.nZones - 1, started: false, done: 0, lapStart: 0, best: null, finished: false, finishTime: 0, lastZoneT: 0 };
 }
 
-// Punto más cercano del recorrido (nodos .pan) a una posición: tramo, avance en el tramo y distancia a la meta
-function pathLocate(pos) {
+// Punto más cercano del recorrido (nodos .pan) a una posición: tramo, avance en el tramo y distancia a la meta.
+// "hint" recuerda el último tramo: así el auto sigue el recorrido en orden y no "salta" a otra parte
+// de la pista que pase cerca (por ejemplo, una calle paralela que se recorre en sentido contrario).
+function segmentAt(path, i, ni, rv) {
+  const n = path.nodes[i], nx = path.nodes[ni];
+  const ab = [nx.pos[0] - n.pos[0], nx.pos[1] - n.pos[1], nx.pos[2] - n.pos[2]];
+  const ap = [rv[0] - n.pos[0], rv[1] - n.pos[1], rv[2] - n.pos[2]];
+  const len2 = Math.max(1, ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2);
+  const t = Math.max(0, Math.min(1, (ab[0] * ap[0] + ab[1] * ap[1] + ab[2] * ap[2]) / len2));
+  const d2 = (ap[0] - ab[0] * t) ** 2 + (ap[1] - ab[1] * t) ** 2 + (ap[2] - ab[2] * t) ** 2;
+  // en el tramo que cruza la meta la distancia "da la vuelta": el nodo de la línea vale la vuelta entera
+  const a = nx.dist > n.dist ? path.total : n.dist;
+  return { from: i, to: ni, t, d2, dist: a + (nx.dist - a) * t };
+}
+function pathLocate(pos, hint) {
   const path = track.path; if (!path) return null;
   const rv = [pos.x, -pos.y, -pos.z];
-  let best = null, bestD = Infinity;
-  path.nodes.forEach((n, i) => {
-    for (const ni of n.next) {
-      const nx = path.nodes[ni]; if (!nx) continue;
-      const ab = [nx.pos[0] - n.pos[0], nx.pos[1] - n.pos[1], nx.pos[2] - n.pos[2]];
-      const ap = [rv[0] - n.pos[0], rv[1] - n.pos[1], rv[2] - n.pos[2]];
-      const len2 = Math.max(1, ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2);
-      const t = Math.max(0, Math.min(1, (ab[0] * ap[0] + ab[1] * ap[1] + ab[2] * ap[2]) / len2));
-      const d2 = (ap[0] - ab[0] * t) ** 2 + (ap[1] - ab[1] * t) ** 2 + (ap[2] - ab[2] * t) ** 2;
-      if (d2 < bestD) {
-        bestD = d2;
-        // en el tramo que cruza la meta la distancia "da la vuelta": el nodo de la línea vale la vuelta entera
-        const a = nx.dist > n.dist ? path.total : n.dist;
-        best = { from: i, to: ni, t, dist: a + (nx.dist - a) * t };
-      }
-    }
-  });
+  const N = path.nodes;
+  let best = null;
+  if (hint && hint.from != null && N[hint.from]) {
+    // tramos vecinos al último conocido: hasta 2 nodos para atrás y 3 para adelante
+    const cand = new Set([hint.from]);
+    let front = [hint.from];
+    for (let k = 0; k < 3; k++) { const nf = []; for (const i of front) for (const j of N[i].next) if (!cand.has(j)) { cand.add(j); nf.push(j); } front = nf; }
+    front = [hint.from];
+    for (let k = 0; k < 2; k++) { const nf = []; for (const i of front) for (const j of N[i].prev) if (!cand.has(j)) { cand.add(j); nf.push(j); } front = nf; }
+    for (const i of cand) for (const ni of N[i].next) { const s = segmentAt(path, i, ni, rv); if (!best || s.d2 < best.d2) best = s; }
+    if (best && best.d2 > 1500 * 1500) best = null; // muy lejos (reapareció o se cortó camino): buscar en toda la pista
+  }
+  if (!best) {
+    N.forEach((n, i) => { for (const ni of n.next) { const s = segmentAt(path, i, ni, rv); if (!best || s.d2 < best.d2) best = s; } });
+  }
+  if (hint && best) hint.from = best.from;
   return best;
 }
 
 // Distancia recorrida dentro de la vuelta (0..1)
-function pathFraction(pos = G.phys.pos) {
-  const loc = pathLocate(pos); if (!loc) return 0;
+function pathFraction(pos = G.phys.pos, hint = G.pathHint) {
+  const loc = pathLocate(pos, hint); if (!loc) return 0;
   return Math.max(0, Math.min(0.999, 1 - loc.dist / track.path.total));
 }
 
 // Punto del recorrido unos metros más adelante (para la flecha de dirección), en coords three
-function pathAhead(pos, ahead) {
-  const loc = pathLocate(pos); if (!loc) return null;
+function pathAhead(pos, ahead, hint = G.pathHint) {
+  const loc = pathLocate(pos, hint); if (!loc) return null;
   const N = track.path.nodes;
   const P3 = n => new THREE.Vector3(n.pos[0], -n.pos[1], -n.pos[2]);
   let a = N[loc.from], b = N[loc.to];
@@ -501,7 +517,7 @@ function enterLobby(code) {
   renderTrackButtons($('lobby-tracksel'));
   updateLobbyTrack();
   $('lobby-sub').textContent = net.isHost ? 'PASALE ESTE CÓDIGO A TUS AMIGOS' : 'CONECTADO A LA SALA';
-  spawnMyCar(0);
+  spawnMyCar(lobbySlot());
   show('scr-lobby');
 }
 
@@ -517,10 +533,14 @@ $('btn-start').onclick = () => {
   startRace(laps, grid, G.trackId);
 };
 $('btn-leave').onclick = () => { net?.close(); net = null; clearRemotes(); G.online = false; toMenu(); };
-$('btn-res-back').onclick = () => { if (G.online && net?.active) { G.mode = 'lobby'; show('scr-lobby'); } else toMenu(); };
+$('btn-res-back').onclick = () => { if (G.online && net?.active) { G.mode = 'lobby'; spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu(); };
 $('btn-quit').onclick = () => {
-  if (G.online && net?.active) { G.mode = 'lobby'; show('scr-lobby'); } else toMenu();
+  if (G.online && net?.active) { G.mode = 'lobby'; spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu();
 };
+
+// lugar en la grilla según el orden de la sala (así en la sala nadie aparece encima de otro)
+function lobbySlot() { return net?.active ? Math.max(0, [...net.players.keys()].indexOf(net.myId)) : 0; }
+let lastLobbySlot = -1;
 
 function toMenu() { G.mode = 'menu'; G.locked = true; renderTrackButtons($('tracksel')); spawnMyCar(0); show('scr-menu'); }
 
@@ -540,7 +560,7 @@ async function chooseTrack(id) {
   for (const el of [$('tracksel'), $('lobby-tracksel')]) [...el.children].forEach(c => c.setAttribute('aria-pressed', c.dataset.id === id));
   if (net?.active && net.isHost) net.send({ t: 'track', track: id });
   updateLobbyTrack();
-  try { await setTrack(id); if (G.trackId === id) await spawnMyCar(0); }
+  try { await setTrack(id); if (G.trackId === id) await spawnMyCar(G.mode === 'lobby' ? lobbySlot() : 0); }
   catch (e) { $('menu-status').textContent = 'No se pudo cargar la pista: ' + e.message; }
 }
 function updateLobbyTrack() { $('lobby-track-name').textContent = 'Pista: ' + trackDef(G.trackId).name; }
@@ -578,6 +598,7 @@ const netHandlers = {
     for (const p of list) if (p.id !== net.myId) ensureRemote(p.id, p.car, p.name);
     for (const id of [...G.remotes.keys()]) if (!ids.has(id)) dropRemote(id);
     $('btn-start').disabled = false;
+    if (G.mode === 'lobby' && lobbySlot() !== lastLobbySlot) { lastLobbySlot = lobbySlot(); spawnMyCar(lastLobbySlot); }
     // el anfitrión le avisa la pista a quien recién entra
     if (net.isHost) net.send({ t: 'track', track: G.trackId });
   },
@@ -591,11 +612,12 @@ const netHandlers = {
   },
   onEvent: d => {
     if (d.t === 'start') { startRace(d.laps, d.grid, d.track); }
+    else if (d.t === 'rank') { if (Array.isArray(d.order)) G.rank = { order: d.order.map(String), at: performance.now() }; }
     else if (d.t === 'track') {
       const tid = d.track;
       if (manifest.tracks.some(t => t.id === tid) && tid !== G.trackId) {
         G.trackId = tid; updateLobbyTrack();
-        setTrack(tid).then(() => { if (G.trackId === tid && G.mode === 'lobby') spawnMyCar(0); }).catch(() => {});
+        setTrack(tid).then(() => { if (G.trackId === tid && G.mode === 'lobby') spawnMyCar(lobbySlot()); }).catch(() => {});
       }
     }
     else if (d.t === 'finish') { addResult({ id: d.id, name: d.name, time: d.time }); if (G.mode === 'race') toast(d.name + ' llegó: ' + fmt(d.time)); }
@@ -678,6 +700,19 @@ const audio = {
     this.osc.frequency.setTargetAtTime(f, t, 0.05); this.osc2.frequency.setTargetAtTime(f * 0.5, t, 0.05);
     this.gain.gain.setTargetAtTime(this.muted || !active ? 0 : 0.05 + Math.abs(throttle) * 0.04, t, 0.08);
   },
+  // golpe corto entre autos: ruido filtrado que se apaga rápido
+  bump(strength) {
+    if (!this.ctx || this.muted) return;
+    const c = this.ctx, t = c.currentTime;
+    if (this.lastBump && t - this.lastBump < 0.15) return;
+    this.lastBump = t;
+    const len = Math.floor(c.sampleRate * 0.12), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    const src = c.createBufferSource(); src.buffer = buf;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500 + strength * 900;
+    const g = c.createGain(); g.gain.value = 0.15 + strength * 0.35;
+    src.connect(lp); lp.connect(g); g.connect(c.destination); src.start();
+  },
   toggle() { this.muted = !this.muted; store.set('rv.mute', this.muted ? '1' : '0'); toast(this.muted ? 'Sonido apagado' : 'Sonido encendido'); },
 };
 
@@ -738,6 +773,16 @@ function updateCamera(dt) {
   camera.position.copy(camPos); camera.lookAt(camLook);
 }
 
+// Clasificación oficial: la arma el anfitrión con el progreso que le reporta cada jugador
+// (todos con el mismo retraso de red) y se la manda a todos.
+function broadcastRank() {
+  const list = [{ id: 'host', prog: G.lastSentProg || 0 }];
+  for (const [id, r] of G.remotes) if (r.tpos && performance.now() - r.seen < 3000) list.push({ id, prog: r.prog || 0 });
+  list.sort((a, b) => b.prog - a.prog || (a.id < b.id ? -1 : 1));
+  G.rank = { order: list.map(x => x.id), at: performance.now() };
+  net.send({ t: 'rank', order: G.rank.order });
+}
+
 // ---------- Aviso de curvas y tabla de posiciones ----------
 // Dirección de la pista (horizontal) en un punto a cierta distancia por delante, según los nodos del recorrido
 function pathDirAt(pos, dist) {
@@ -793,9 +838,11 @@ function updateStandings(now) {
     const pr = remoteProgress(r, now);
     list.push({ me: false, id, name: r.name || 'Piloto', prog: pr, fin: pr >= 1e5, lap: Math.floor(pr / 100) });
   }
-  // Si van prácticamente a la par (menos de un auto de diferencia), desempata el id:
-  // así todos los navegadores muestran el mismo orden en vez de que cada uno se crea segundo.
-  list.sort((a, b) => Math.abs(a.prog - b.prog) < 4e-4 ? (a.id < b.id ? -1 : 1) : b.prog - a.prog);
+  // Online se usa el orden que reparte el anfitrión, así todos ven la misma tabla.
+  // Si todavía no llegó (o es viejo), se ordena con lo que se ve en esta compu.
+  const rank = G.rank && now - G.rank.at < 1500 ? G.rank.order : null;
+  if (rank && list.every(x => rank.includes(x.id))) list.sort((a, b) => rank.indexOf(a.id) - rank.indexOf(b.id));
+  else list.sort((a, b) => Math.abs(a.prog - b.prog) < 4e-4 ? (a.id < b.id ? -1 : 1) : b.prog - a.prog);
   const myPos = list.findIndex(x => x.me) + 1;
   $('h-pos').textContent = others.length ? myPos + '°/' + list.length : '';
   const box = $('h-standings');
@@ -831,7 +878,13 @@ function frame(now) {
     // guardar el estado anterior para interpolar el dibujo entre pasos de física
     G.prevPos = G.phys.pos.clone(); G.prevQuat = G.phys.quat.clone();
     G.phys.step(FIXED);
-    for (const r of G.remotes.values()) if (r.tpos && now - r.seen < 2000) G.phys.collideCar(r.pos, r.vel, r.radius);
+    // choques entre autos solo durante la carrera (en la sala los autos están quietos en la grilla)
+    if (G.mode === 'race') for (const r of G.remotes.values()) {
+      if (!r.vis || !r.tpos || now - r.seen > 2000) continue;
+      const cd = carDefs.get(r.carId); if (!cd?.spheres) continue;
+      const hit = G.phys.collideWithCar({ pos: r.pos, quat: r.quat, vel: r.vel, spheres: cd.spheres, mass: cd.params.mass || 1.2 });
+      if (hit > 300) audio.bump(Math.min(1, hit / 2000));
+    }
     acc -= FIXED;
   }
 
@@ -868,7 +921,9 @@ function frame(now) {
     netT = 0;
     const r1 = v => Math.round(v * 10) / 10, r3 = v => Math.round(v * 1000) / 1000;
     net.send({ t: 'state', car: G.carId, p: [r1(P.pos.x), r1(P.pos.y), r1(P.pos.z)], q: [r3(P.quat.x), r3(P.quat.y), r3(P.quat.z), r3(P.quat.w)],
-      v: [r1(P.vel.x), r1(P.vel.y), r1(P.vel.z)], su: P.wheels.map(w => r1(w.suspOffset)), st: P.wheels.map(w => r3(w.steerAngle || 0)), pr: G.mode === 'race' ? progressValue() : 0 });
+      v: [r1(P.vel.x), r1(P.vel.y), r1(P.vel.z)], su: P.wheels.map(w => r1(w.suspOffset)), st: P.wheels.map(w => r3(w.steerAngle || 0)), pr: (G.lastSentProg = G.mode === 'race' ? progressValue() : 0) });
+    // el anfitrión arma la clasificación y la reparte (así todos ven el mismo orden)
+    if (net.isHost && G.mode === 'race' && now - (G.rankSent || 0) > 250) { G.rankSent = now; broadcastRank(); }
   }
 
   // HUD
@@ -914,7 +969,7 @@ async function boot() {
     await spawnMyCar(0);
     G.mode = 'menu'; show('scr-menu');
     $('loading').hidden = true;
-    window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar };
+    window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate };
   } catch (e) {
     console.error(e);
     $('loadmsg').textContent = 'No se pudo cargar: ' + e.message + '. Si abriste el archivo con doble clic, tiene que estar subido a una página web (ver LEEME).';

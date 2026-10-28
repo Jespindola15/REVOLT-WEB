@@ -12,6 +12,14 @@ const _ray = new THREE.Ray();
 const _m3 = new THREE.Matrix3();
 const UP = new THREE.Vector3(0, 1, 0);
 
+// 3 esferas a lo largo del auto (adelante, centro, atrás), del ancho de la carrocería
+export function carSpheresFromBox(box) {
+  const sz = box.getSize(new THREE.Vector3()), ce = box.getCenter(new THREE.Vector3());
+  const r = Math.max(8, sz.x * 0.5 * 0.9);
+  const hz = Math.max(0, sz.z * 0.5 - r);
+  return [-hz, 0, hz].map(z => ({ c: new THREE.Vector3(ce.x, ce.y, ce.z + z), r }));
+}
+
 export class CarPhysics {
   constructor(params, bodyBox, world) {
     this.p = params;
@@ -62,7 +70,8 @@ export class CarPhysics {
     this.spheres = [];
     const hx = Math.max(0, sz.x / 2 - r), hz = Math.max(0, sz.z / 2 - r);
     for (const z of [-hz, 0, hz]) for (const x of [-hx, hx]) this.spheres.push(new THREE.Vector3(ce.x + x, ce.y, ce.z + z));
-    this.radius = Math.max(sz.x, sz.z) * 0.5; // para choques entre autos
+    this.radius = Math.max(sz.x, sz.z) * 0.5;
+    this.carSpheres = carSpheresFromBox(b); // para choques entre autos
     this.grounded = 0;
     this.lastSafe = null; this.safeTimer = 0; this.flipTimer = 0;
     this.speed = 0; this.fwdSpeed = 0;
@@ -320,14 +329,43 @@ export class CarPhysics {
     }
   }
 
-  // Choque simple contra otro auto (posición y velocidad estimada)
-  collideCar(otherPos, otherVel, otherR) {
-    const d = _v1.copy(this.pos).sub(otherPos);
-    const dist = d.length(), minD = this.radius * 0.8 + otherR * 0.8;
-    if (dist >= minD || dist < 1e-3) return;
-    d.divideScalar(dist);
-    this.pos.addScaledVector(d, (minD - dist) * 0.5);
-    const rel = this.vel.clone().sub(otherVel).dot(d);
-    if (rel < 0) this.vel.addScaledVector(d, -rel * 0.9);
+  // Choque contra otro auto. Cada auto es una fila de 3 esferas a lo largo de la carrocería.
+  // Se separa la mitad de la superposición (la otra mitad la hace el otro jugador en su compu)
+  // y se aplica un impulso según la velocidad relativa y el peso de cada auto.
+  collideWithCar(o) {
+    const e = 0.3; // rebote
+    const qa = this.quat, qb = o.quat;
+    let hit = false;
+    for (const sa of this.carSpheres) {
+      const a = _v1.copy(sa.c).applyQuaternion(qa).add(this.pos);
+      for (const sb of o.spheres) {
+        const b = _v2.copy(sb.c).applyQuaternion(qb).add(o.pos);
+        const n = _v3.copy(a).sub(b);
+        const dist = n.length(), minD = sa.r + sb.r;
+        if (dist >= minD || dist < 1e-3) continue;
+        n.divideScalar(dist);
+        const pen = minD - dist;
+        this.pos.addScaledVector(n, pen * 0.5);
+        a.addScaledVector(n, pen * 0.5);
+        const contact = b.clone().addScaledVector(n, sb.r);
+        const rr = contact.clone().sub(this.pos);
+        const vRel = new THREE.Vector3().crossVectors(this.angVel, rr).add(this.vel).sub(o.vel);
+        const vn = vRel.dot(n);
+        if (vn < 0) {
+          const rxn = new THREE.Vector3().crossVectors(rr, n);
+          const ang = n.dot(new THREE.Vector3().crossVectors(this.invIWorld(rxn, new THREE.Vector3()), rr));
+          const k = 1 / this.mass + 1 / Math.max(0.3, o.mass) + ang;
+          const j = -(1 + e) * vn / k;
+          const imp = n.clone().multiplyScalar(j);
+          // un poco de roce entre carrocerías
+          const vt = vRel.clone().addScaledVector(n, -vn); const vtl = vt.length();
+          if (vtl > 1e-3) imp.addScaledVector(vt, -Math.min(vtl / k * 0.3, 0.25 * j) / vtl);
+          this.applyImpulse(contact, imp);
+          hit = Math.max(hit || 0, -vn);
+        }
+      }
+    }
+    return hit; // velocidad del impacto (0 si no hubo)
   }
+
 }
