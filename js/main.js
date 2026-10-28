@@ -198,8 +198,11 @@ async function buildSky(dir, files) {
 
 // Parámetros de todos los autos al arrancar (livianos); los modelos 3D se bajan cuando hacen falta
 async function loadCarParams(def) {
-  const txt = await fetchText(BASE + 'cars/' + def.id + '/parameters.txt');
-  carDefs.set(def.id, { def, params: parseCarParams(txt) });
+  // "dir": autos que comparten modelo con otro y solo cambian la pintura (ej.: los F1 2022)
+  const txt = await fetchText(BASE + 'cars/' + (def.dir || def.id) + '/parameters.txt');
+  const params = parseCarParams(txt);
+  if (def.dir && def.name) params.name = def.name;
+  carDefs.set(def.id, { def, params });
 }
 
 function ensureCar(id) {
@@ -207,7 +210,7 @@ function ensureCar(id) {
   if (!cd) return Promise.reject(new Error('Auto desconocido: ' + id));
   if (cd.body) return Promise.resolve(cd);
   cd.loading ??= (async () => {
-    const def = cd.def, dir = BASE + 'cars/' + def.id + '/';
+    const def = cd.def, dir = BASE + 'cars/' + (def.dir || def.id) + '/';
     const tex = def.tex ? await loadTexture(dir + def.tex) : null;
     // En los autos cualquier página de textura >= 0 es la textura del auto (TPAGE)
     const carMats = makeMaterials([tex]);
@@ -1632,6 +1635,7 @@ async function boot() {
       return now;
     };
     window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate, audio, weapons, THREE, gridSlot, startBotRace, botProgress, TUNE, records, BotDriver, botNav,
+      selectCar,
       finishTest: t => { G.locked = false; G.goTime = performance.now() - t; finishRace(performance.now()); },
       netIsHost: () => !!net?.isHost, netDrop: () => { try { net.hostConn?.close(); } catch (e) {} } };
   } catch (e) {

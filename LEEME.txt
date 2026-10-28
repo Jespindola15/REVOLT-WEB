@@ -17,7 +17,7 @@ Pistas (10):
   - Evergreen Hills
   - Donniengton Park
 
-Autos (22):
+Autos (43):
   - Clásicos: RC Bandit, Col. Moss, Adeon, AMW, Volken Turbo, Dust Mite,
     Panga, RC San
   - Cars 2: Lightning McQueen, Francesco Bernoulli, Max Schnell,
@@ -25,6 +25,10 @@ Autos (22):
     Nigel Gearsley
   - Reales: Porsche Panamera Turbo Sport Turismo, Lamborghini Gallardo,
     Mitsubishi Lancer Evo VII GSR, Nissan Skyline GTS-R, VW Golf TDI
+  - F1: Acclaim F1 2026
+  - F1 2022: el Acclaim F1 con las pinturas de los 20 autos de 2022 (Red Bull,
+    Ferrari, Mercedes, Alpine, McLaren, Alfa Romeo, Aston Martin, Haas,
+    AlphaTauri y Williams), uno por número
 
 En el menú, el garage muestra cada auto con su foto y sus datos reales
 (velocidad máxima, aceleración, agarre, dirección, peso, motor y tracción).
