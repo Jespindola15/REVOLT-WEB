@@ -231,23 +231,56 @@ function resetLaps() {
   G.lap = { cur: track.nZones - 1, started: false, done: 0, lapStart: 0, best: null, finished: false, finishTime: 0, lastZoneT: 0 };
 }
 
-// Distancia recorrida dentro de la vuelta (0..1) usando los nodos de recorrido de la pista
-function pathFraction() {
-  const path = track.path; if (!path) return 0;
-  const p = G.phys.pos; const rv = [p.x, -p.y, -p.z];
-  // el punto más cercano sobre cualquier tramo nodo -> siguiente
-  let bestD = Infinity, dist = 0;
-  for (const n of path.nodes) for (const ni of n.next) {
-    const nx = path.nodes[ni]; if (!nx) continue;
-    const ab = [nx.pos[0] - n.pos[0], nx.pos[1] - n.pos[1], nx.pos[2] - n.pos[2]];
-    const ap = [rv[0] - n.pos[0], rv[1] - n.pos[1], rv[2] - n.pos[2]];
-    const len2 = Math.max(1, ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2);
-    const t = Math.max(0, Math.min(1, (ab[0] * ap[0] + ab[1] * ap[1] + ab[2] * ap[2]) / len2));
-    const d2 = (ap[0] - ab[0] * t) ** 2 + (ap[1] - ab[1] * t) ** 2 + (ap[2] - ab[2] * t) ** 2;
-    // en el tramo que cruza la meta la distancia "da la vuelta": el nodo de la línea vale la vuelta entera
-    if (d2 < bestD) { bestD = d2; const a = nx.dist > n.dist ? path.total : n.dist; dist = a + (nx.dist - a) * t; }
+// Punto más cercano del recorrido (nodos .pan) a una posición: tramo, avance en el tramo y distancia a la meta
+function pathLocate(pos) {
+  const path = track.path; if (!path) return null;
+  const rv = [pos.x, -pos.y, -pos.z];
+  let best = null, bestD = Infinity;
+  path.nodes.forEach((n, i) => {
+    for (const ni of n.next) {
+      const nx = path.nodes[ni]; if (!nx) continue;
+      const ab = [nx.pos[0] - n.pos[0], nx.pos[1] - n.pos[1], nx.pos[2] - n.pos[2]];
+      const ap = [rv[0] - n.pos[0], rv[1] - n.pos[1], rv[2] - n.pos[2]];
+      const len2 = Math.max(1, ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2);
+      const t = Math.max(0, Math.min(1, (ab[0] * ap[0] + ab[1] * ap[1] + ab[2] * ap[2]) / len2));
+      const d2 = (ap[0] - ab[0] * t) ** 2 + (ap[1] - ab[1] * t) ** 2 + (ap[2] - ab[2] * t) ** 2;
+      if (d2 < bestD) {
+        bestD = d2;
+        // en el tramo que cruza la meta la distancia "da la vuelta": el nodo de la línea vale la vuelta entera
+        const a = nx.dist > n.dist ? path.total : n.dist;
+        best = { from: i, to: ni, t, dist: a + (nx.dist - a) * t };
+      }
+    }
+  });
+  return best;
+}
+
+// Distancia recorrida dentro de la vuelta (0..1)
+function pathFraction(pos = G.phys.pos) {
+  const loc = pathLocate(pos); if (!loc) return 0;
+  return Math.max(0, Math.min(0.999, 1 - loc.dist / track.path.total));
+}
+
+// Punto del recorrido unos metros más adelante (para la flecha de dirección), en coords three
+function pathAhead(pos, ahead) {
+  const loc = pathLocate(pos); if (!loc) return null;
+  const N = track.path.nodes;
+  const P3 = n => new THREE.Vector3(n.pos[0], -n.pos[1], -n.pos[2]);
+  let a = N[loc.from], b = N[loc.to];
+  let cur = P3(a).lerp(P3(b), loc.t), left = ahead, guard = 0;
+  while (guard++ < 20) {
+    const end = P3(b), seg = cur.distanceTo(end);
+    if (seg >= left) return cur.lerp(end, left / Math.max(1, seg));
+    left -= seg; cur = end; a = b; b = N[b.next[0]]; if (!b) return cur;
   }
-  return Math.max(0, Math.min(0.999, 1 - dist / path.total));
+  return cur;
+}
+
+function remoteProgress(r, now) {
+  const pr = r.prog || 0;
+  if (pr >= 1e5 || !track.path) return pr;
+  const age = Math.min(0.3, (now - r.seen) / 1000);
+  return pr + r.vel.length() * age * 0.5 / track.path.total;
 }
 
 function progressValue() {
@@ -518,36 +551,96 @@ function carScale() {
   return Math.max(1, Math.min(2, ext / 55));
 }
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
-let camInit = false, orbit = 0;
+const camDir = new THREE.Vector3(0, 0, -1);
+let camInit = false, orbit = 0, camY = 0, camDist = 0;
 function updateCamera(dt) {
   if (!G.phys) return;
   // la cámara sigue la posición interpolada (la que se ve), no la de física
   const P = { pos: G.renderPos, quat: G.renderQuat };
-  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(P.quat); fwd.y *= 0.3; fwd.normalize();
-  let want, look;
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(P.quat); fwd.y = 0;
+  if (fwd.lengthSq() < 1e-4) fwd.copy(camDir); fwd.normalize();
   if (G.mode === 'menu' || G.mode === 'lobby' || G.mode === 'results') {
     orbit += dt * 0.35;
     const sc = carScale();
-    want = P.pos.clone().add(new THREE.Vector3(Math.sin(orbit) * 230 * sc, 75 * sc, Math.cos(orbit) * 230 * sc));
-    look = P.pos.clone().add(new THREE.Vector3(0, 10, 0));
-  } else if (G.camMode === 2) {
-    want = P.pos.clone().addScaledVector(fwd, 20).add(new THREE.Vector3(0, 22, 0));
-    look = P.pos.clone().addScaledVector(fwd, 400).add(new THREE.Vector3(0, 15, 0));
+    const want = P.pos.clone().add(new THREE.Vector3(Math.sin(orbit) * 230 * sc, 75 * sc, Math.cos(orbit) * 230 * sc));
+    const look = P.pos.clone().add(new THREE.Vector3(0, 10, 0));
+    const k = 1 - Math.exp(-dt * 7);
+    if (!camInit) { camPos.copy(want); camLook.copy(look); camInit = true; }
+    camPos.lerp(want, k); camLook.lerp(look, k);
+    camDir.copy(fwd); camY = P.pos.y; camDist = 0;
+    camera.position.copy(camPos); camera.lookAt(camLook);
+    return;
+  }
+  // Sin retraso de posición: la cámara va siempre a la misma distancia del auto, así el auto
+  // no "tiembla" en pantalla cuando un cuadro tarda más que otro. Solo se suavizan el giro y la altura.
+  camDir.lerp(fwd, 1 - Math.exp(-dt * (G.camMode === 2 ? 25 : 6))).normalize();
+  camY += (P.pos.y - camY) * (1 - Math.exp(-dt * 8));
+  const base = new THREE.Vector3(P.pos.x, camY, P.pos.z);
+  let want, look;
+  if (G.camMode === 2) {
+    want = P.pos.clone().addScaledVector(camDir, 20).add(new THREE.Vector3(0, 22, 0));
+    look = P.pos.clone().addScaledVector(camDir, 400).add(new THREE.Vector3(0, 15, 0));
   } else {
     const sc = carScale();
     const dist = (G.camMode === 0 ? 215 : 340) * sc, hgt = (G.camMode === 0 ? 70 : 120) * sc;
-    want = P.pos.clone().addScaledVector(fwd, -dist).add(new THREE.Vector3(0, hgt, 0));
-    look = P.pos.clone().addScaledVector(fwd, 60).add(new THREE.Vector3(0, 22, 0));
+    // que la cámara no atraviese paredes (la distancia se acerca rápido y se aleja despacio)
+    const from = base.clone().add(new THREE.Vector3(0, 30, 0));
+    const dir = camDir.clone().negate().add(new THREE.Vector3(0, (hgt - 30) / dist, 0)).normalize();
+    const full = Math.hypot(dist, hgt - 30);
+    const hit = world.bvh.raycastFirst(new THREE.Ray(from, dir), THREE.DoubleSide, 0, full);
+    const allowed = hit ? Math.max(30, hit.distance - 12) : full;
+    if (!camDist) camDist = allowed;
+    camDist = allowed < camDist ? allowed : camDist + (allowed - camDist) * (1 - Math.exp(-dt * 3));
+    want = from.addScaledVector(dir, camDist);
+    look = base.clone().addScaledVector(camDir, 60).add(new THREE.Vector3(0, 22, 0));
   }
-  // que la cámara no atraviese paredes
-  const from = P.pos.clone().add(new THREE.Vector3(0, 30, 0));
-  const dir = want.clone().sub(from); const len = dir.length(); dir.normalize();
-  const hit = world.bvh.raycastFirst(new THREE.Ray(from, dir), THREE.DoubleSide, 0, len);
-  if (hit && G.camMode !== 2) want = from.addScaledVector(dir, Math.max(30, hit.distance - 12));
-  const k = 1 - Math.exp(-dt * (G.camMode === 2 ? 30 : 7));
-  if (!camInit) { camPos.copy(want); camLook.copy(look); camInit = true; }
-  camPos.lerp(want, k); camLook.lerp(look, 1 - Math.exp(-dt * 12));
+  camPos.copy(want); camLook.copy(look); camInit = true;
   camera.position.copy(camPos); camera.lookAt(camLook);
+}
+
+// ---------- Flecha de dirección y tabla de posiciones ----------
+let arrowAngle = 0, wrongT = 0, standT = 0;
+function updateArrow(dt) {
+  const el = $('h-arrow');
+  if (!track.path || G.lap.finished) { el.hidden = true; $('h-wrong').hidden = true; return; }
+  const target = pathAhead(G.renderPos, 900);
+  if (!target) { el.hidden = true; return; }
+  const f = new THREE.Vector3(0, 0, -1).applyQuaternion(G.renderQuat); f.y = 0; f.normalize();
+  const t = target.clone().sub(G.renderPos); t.y = 0;
+  if (t.lengthSq() < 1) return;
+  t.normalize();
+  // ángulo con signo: positivo = la pista sigue hacia la derecha
+  const ang = Math.atan2(f.x * t.z - f.z * t.x, f.x * t.x + f.z * t.z);
+  let d = ang - arrowAngle; d = Math.atan2(Math.sin(d), Math.cos(d));
+  arrowAngle += d * Math.min(1, dt * 10);
+  el.hidden = false;
+  el.style.transform = `translateX(-50%) rotate(${(arrowAngle * 180 / Math.PI).toFixed(1)}deg)`;
+  // contramano: mirando para atrás y en movimiento
+  if (Math.abs(ang) > 1.9 && Math.abs(G.phys.fwdSpeed) > 250 && !G.locked) wrongT += dt; else wrongT = Math.max(0, wrongT - dt * 2);
+  $('h-wrong').hidden = wrongT < 0.8;
+}
+
+function updateStandings(now) {
+  const others = [...G.remotes.values()].filter(r => r.tpos && now - r.seen < 3000);
+  const list = [{ me: true, id: net?.myId || 'me', name: G.name || 'Vos', prog: progressValue(), fin: G.lap.finished, lap: G.lap.done }];
+  for (const [id, r] of G.remotes) {
+    if (!others.includes(r)) continue;
+    const pr = remoteProgress(r, now);
+    list.push({ me: false, id, name: r.name || 'Piloto', prog: pr, fin: pr >= 1e5, lap: Math.floor(pr / 100) });
+  }
+  // Si van prácticamente a la par (menos de un auto de diferencia), desempata el id:
+  // así todos los navegadores muestran el mismo orden en vez de que cada uno se crea segundo.
+  list.sort((a, b) => Math.abs(a.prog - b.prog) < 4e-4 ? (a.id < b.id ? -1 : 1) : b.prog - a.prog);
+  const myPos = list.findIndex(x => x.me) + 1;
+  $('h-pos').textContent = others.length ? myPos + '°/' + list.length : '';
+  const box = $('h-standings');
+  box.hidden = !others.length;
+  if (!others.length || now - standT < 150) return; // la tabla se redibuja ~7 veces por segundo
+  standT = now;
+  box.innerHTML = list.map((x, i) => {
+    const info = x.fin ? 'LLEGÓ' : 'V' + Math.min(G.laps, x.lap + 1);
+    return `<li class="${x.me ? 'me' : ''}"><b>${i + 1}°</b><span>${esc(x.name)}</span><em>${info}</em></li>`;
+  }).join('');
 }
 
 // ---------- Bucle ----------
@@ -620,16 +713,15 @@ function frame(now) {
     if (G.mode === 'race') {
       $('h-lap').textContent = 'VUELTA ' + Math.min(G.laps, L.done + 1) + '/' + G.laps;
       $('h-time').textContent = fmt(G.locked ? 0 : (L.finished ? L.finishTime : now - G.goTime));
-      const others = [...G.remotes.values()].filter(r => r.tpos);
-      const mine = progressValue();
-      const pos = 1 + others.filter(r => (r.prog || 0) > mine).length;
-      $('h-pos').textContent = others.length ? pos + '°/' + (others.length + 1) : '';
+      updateStandings(now);
     } else {
       $('h-lap').textContent = 'VUELTA ' + (L.done + 1);
       $('h-time').textContent = fmt(G.locked || !L.started ? 0 : now - L.lapStart);
       $('h-pos').textContent = '';
+      $('h-standings').hidden = true;
     }
     $('h-best').textContent = fmt(L.best);
+    updateArrow(dt);
   }
   audio.update(Math.min(1, Math.abs(P.fwdSpeed) / P.top), inp.throttle, driving);
   renderer.render(scene, camera);

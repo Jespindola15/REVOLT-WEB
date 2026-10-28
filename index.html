@@ -93,6 +93,19 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
 #loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--ink); z-index: 50; font-family: var(--display); color: var(--volt); font-size: 22px; text-align: center; padding: 16px; }
 #loading p { font-family: var(--body); color: var(--muted); font-size: 14px; }
 
+/* flecha de dirección y posiciones */
+.dir-arrow { position: absolute; left: 50%; top: calc(max(14px, env(safe-area-inset-top, 0px)) + 46px); transform: translateX(-50%); transform-origin: 50% 50%; width: 64px; height: 64px; filter: drop-shadow(3px 3px 0 rgba(0,0,0,.55)); }
+.dir-arrow path { fill: var(--volt); stroke: var(--ink); stroke-width: 4; stroke-linejoin: round; }
+.wrongway { position: absolute; left: 0; right: 0; top: 42%; text-align: center; font-family: var(--display); font-size: clamp(34px, 8vw, 72px); color: var(--coral); text-shadow: 4px 4px 0 var(--ink); animation: blink .6s steps(2, start) infinite; }
+@keyframes blink { to { visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { .wrongway { animation: none; } }
+.standings { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; align-items: stretch; min-width: 170px; }
+.standings li { display: grid; grid-template-columns: 30px 1fr auto; gap: 6px; align-items: center; background: rgba(18,22,43,.78); border-left: 3px solid var(--ink-3); padding: 3px 8px; border-radius: 3px; font-size: 14px; font-weight: 700; text-align: left; }
+.standings li.me { border-left-color: var(--volt); background: rgba(42,50,96,.9); }
+.standings li b { font-family: var(--display); font-weight: 400; color: var(--volt); }
+.standings li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.standings li em { font-style: normal; font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+
 /* controles táctiles */
 #touch { position: fixed; inset: auto 0 0 0; display: flex; justify-content: space-between; padding: 0 max(16px, env(safe-area-inset-right, 0px)) max(20px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); pointer-events: none; }
 #touch .grp { display: flex; gap: 12px; pointer-events: auto; }
@@ -185,9 +198,13 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
   </div>
   <div class="hud-tr">
     <div class="hud-big" id="h-pos"></div>
-    <div class="hud-small" id="h-others"></div>
+    <ol class="standings" id="h-standings" hidden></ol>
   </div>
   <button class="menu-btn" id="btn-quit">Menú</button>
+  <div class="dir-arrow" id="h-arrow" hidden aria-hidden="true">
+    <svg viewBox="0 0 64 64" width="64" height="64"><path d="M32 4 L58 40 L42 40 L42 60 L22 60 L22 40 L6 40 Z"/></svg>
+  </div>
+  <div class="wrongway" id="h-wrong" hidden>¡CONTRAMANO!</div>
   <div class="center-msg" id="h-center" hidden></div>
   <div class="toast" id="h-toast" hidden></div>
   <div class="speedo"><b id="h-speed">0</b><span>KM/H</span></div>
