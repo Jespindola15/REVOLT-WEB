@@ -14,13 +14,18 @@ Pistas (7):
   - Toytanic 1 (el barco)
   - Jardín Botánico
 
-Autos (20):
+Autos (21):
   - Clásicos: RC Bandit, Col. Moss, Adeon, AMW, Volken Turbo, Dust Mite,
     Panga, RC San
   - Cars 2: Lightning McQueen, Francesco Bernoulli, Max Schnell,
     Shu Todoroki, Carla Veloso, Raoul ÇaRoule, Jeff Gorvette, Miguel Camino,
     Nigel Gearsley
-  - Touge: Styx, Hestia, [D] Hestia
+  - Touge: Styx, [D] Styx, Hestia, [D] Hestia
+
+En el menú, el garage muestra cada auto con su foto y sus datos reales
+(velocidad máxima, aceleración, agarre, dirección, peso, motor y tracción).
+Cambiá de auto con las flechas ‹ › (o las flechas del teclado) y de grupo con
+las pestañas. En la sala online también podés cambiar de auto.
 
 En la sala online, el que la crea elige la pista y a los demás se les cambia
 sola. Las pistas y los autos se bajan recién cuando se eligen.

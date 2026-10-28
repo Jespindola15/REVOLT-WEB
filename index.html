@@ -42,13 +42,39 @@ button { cursor: pointer; }
 input[type=text] { background: var(--ink-2); border: 2px solid var(--ink-3); color: var(--paper); padding: 10px 12px; font-size: 16px; border-radius: 4px; }
 input[type=text]:focus { border-color: var(--volt); outline: none; }
 
-.cars { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
-.car { background: var(--ink-2); border: 2px solid var(--ink-3); color: var(--paper); border-radius: 4px; padding: 8px 10px; text-align: left; display: flex; flex-direction: column; gap: 6px; }
-.car[aria-pressed=true] { border-color: var(--volt); background: var(--ink-3); }
-.car b { font-size: 15px; }
-.bars { display: grid; grid-template-columns: 34px 1fr; gap: 3px 6px; align-items: center; font-size: 10px; color: var(--muted); letter-spacing: 1px; }
-.bar { height: 5px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; }
-.bar i { display: block; height: 100%; background: var(--volt); }
+.bar { height: 6px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--volt); transition: width .25s ease; }
+
+/* garage: selección de auto */
+.garage { display: flex; flex-direction: column; gap: 10px; background: var(--ink-2); border: 2px solid var(--ink-3); border-radius: 6px; padding: 10px; }
+.g-tabs { display: flex; gap: 4px; }
+.g-tabs button { flex: 1; background: transparent; color: var(--muted); border: 0; border-bottom: 3px solid var(--ink-3); padding: 6px 4px; font-weight: 700; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
+.g-tabs button[aria-selected=true] { color: var(--volt); border-bottom-color: var(--volt); }
+.g-tabs button small { display: block; font-size: 10px; color: var(--muted); letter-spacing: 0; text-transform: none; font-weight: 600; }
+.g-main { display: grid; grid-template-columns: 34px 1fr 34px; align-items: center; gap: 6px; }
+.g-arrow { height: 100%; min-height: 60px; background: var(--ink); color: var(--volt); border: 2px solid var(--ink-3); border-radius: 4px; font-family: var(--display); font-size: 28px; line-height: 1; }
+.g-arrow:hover { border-color: var(--volt); }
+.g-card { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.g-shot { width: 100%; aspect-ratio: 16 / 9; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 70%, #2f3a72 0%, var(--ink) 70%); border-radius: 4px; overflow: hidden; }
+.g-shot img { width: 100%; height: 100%; object-fit: contain; }
+.g-shot img:not([src]) { visibility: hidden; }
+.g-name { font-family: var(--display); font-size: 22px; color: var(--volt); text-align: center; line-height: 1.05; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-sub { font-size: 12px; color: var(--muted); letter-spacing: 1px; text-align: center; }
+.g-stats { display: grid; grid-template-columns: auto 1fr auto; gap: 5px 8px; align-items: center; margin: 0; font-size: 12px; }
+.g-stats dt { color: var(--muted); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; font-size: 11px; }
+.g-stats dd { margin: 0; }
+.g-stats .bar { display: block; }
+.g-stats dd.v { color: var(--paper); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.g-stats .tags { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+.g-stats .tags span { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--paper); background: var(--ink-3); border-radius: 3px; padding: 2px 7px; text-transform: uppercase; }
+.g-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; }
+.g-strip button { flex: none; width: 92px; scroll-snap-align: start; background: var(--ink); border: 2px solid var(--ink-3); border-radius: 4px; padding: 3px; color: var(--paper); display: flex; flex-direction: column; gap: 2px; align-items: stretch; }
+.g-strip button[aria-selected=true] { border-color: var(--volt); }
+.g-strip img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: rgba(255,255,255,.04); border-radius: 2px; }
+.g-strip span { font-size: 10px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.lobby-car { display: grid; grid-template-columns: 34px 1fr 34px; gap: 6px; align-items: center; }
+.lobby-car .g-arrow { min-height: 40px; }
+.lobby-car b { text-align: center; font-family: var(--display); font-weight: 400; color: var(--volt); font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .btn { font-family: var(--display); font-size: 17px; letter-spacing: .5px; border: 0; border-radius: 4px; padding: 12px 14px; background: var(--volt); color: var(--ink); box-shadow: 4px 4px 0 var(--coral); }
 .btn:active { transform: translate(2px,2px); box-shadow: 2px 2px 0 var(--coral); }
@@ -77,7 +103,6 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
 .tracksel { display: flex; gap: 6px; flex-wrap: wrap; }
 .tracksel button { flex: 1 1 120px; background: var(--ink-2); color: var(--paper); border: 2px solid var(--ink-3); border-radius: 4px; padding: 9px 8px; font-weight: 700; font-size: 14px; }
 .tracksel button[aria-pressed=true] { border-color: var(--volt); color: var(--volt); background: var(--ink-3); }
-.car-group { grid-column: 1 / -1; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--volt); font-weight: 700; margin-top: 4px; }
 #busy { position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 40; background: var(--ink); color: var(--volt); border: 2px solid var(--volt); border-radius: 4px; padding: 8px 16px; font-family: var(--display); font-size: 16px; box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
 
 /* HUD */
@@ -180,7 +205,20 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
     </div>
     <div class="field">
       <span class="label">Elegí tu auto</span>
-      <div class="cars" id="cars"></div>
+      <div class="garage" id="garage">
+        <div class="g-tabs" id="g-tabs" role="tablist" aria-label="Grupos de autos"></div>
+        <div class="g-main">
+          <button type="button" class="g-arrow" id="g-prev" aria-label="Auto anterior">‹</button>
+          <div class="g-card">
+            <div class="g-shot"><img id="g-shot" alt=""></div>
+            <div class="g-name" id="g-name"></div>
+            <div class="g-sub" id="g-sub"></div>
+          </div>
+          <button type="button" class="g-arrow" id="g-next" aria-label="Auto siguiente">›</button>
+        </div>
+        <dl class="g-stats" id="g-stats"></dl>
+        <div class="g-strip" id="g-strip" role="listbox" aria-label="Autos del grupo"></div>
+      </div>
     </div>
     <div class="field">
       <label class="label" for="steer">Sensibilidad de dirección <span class="steer-val">100%</span></label>
@@ -233,6 +271,14 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
       <div class="tracksel" id="lobby-tracksel"></div>
     </div>
     <p class="hint" id="lobby-track-name" hidden></p>
+    <div class="field">
+      <span class="label">Tu auto</span>
+      <div class="lobby-car">
+        <button type="button" class="g-arrow" id="lc-prev" aria-label="Auto anterior">‹</button>
+        <b id="lc-name"></b>
+        <button type="button" class="g-arrow" id="lc-next" aria-label="Auto siguiente">›</button>
+      </div>
+    </div>
     <div class="field" id="lap-field">
       <span class="label">Vueltas</span>
       <div class="lapsel" id="lapsel">

@@ -153,6 +153,7 @@ export function parseCarParams(text) {
   return {
     name: (text.match(/^\s*Name\s+"([^"]*)"/mi) || [])[1] || '?',
     topEnd: num(head, 'TopEnd', 0), topSpeed: num(head, 'TopSpeed', 30), acc: num(head, 'Acc', 6),
+    cls: num(head, 'Class', 0), rating: num(head, 'Rating', -1),
     steerRate: num(head, 'SteerRate', 3), steerMod: num(head, 'SteerMod', 0.4), engineRate: num(head, 'EngineRate', 4),
     downForceMod: num(head, 'DownForceMod', 2), com: vec(head, 'CoM'),
     mass: num(body, 'Mass', 1.2), inertia: (() => {

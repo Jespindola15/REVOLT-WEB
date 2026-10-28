@@ -252,9 +252,9 @@ function flattenWheel(V) {
 
 // ---------- Visual de un auto ----------
 class CarVisual {
-  constructor(carId) {
+  constructor(carId, parent = scene) {
     const cd = carDefs.get(carId);
-    this.carId = carId;
+    this.carId = carId; this.parent = parent;
     this.root = new THREE.Group();
     this.root.add(cd.body.clone());
     this.wheelObjs = [];
@@ -267,7 +267,7 @@ class CarVisual {
       this.wheelObjs.push({ pivot, steerG, spinG, base: pivot.position.clone() });
     });
     this.nameTag = null;
-    scene.add(this.root);
+    parent.add(this.root);
   }
   setWheels(susp, steer, spin) {
     let k = 0;
@@ -291,7 +291,7 @@ class CarVisual {
     sp.scale.set(80, 20, 1); sp.position.set(0, 50, 0); sp.renderOrder = 10;
     this.nameTag = sp; this.root.add(sp);
   }
-  dispose() { scene.remove(this.root); }
+  dispose() { this.parent.remove(this.root); }
 }
 
 // ---------- Estado del juego ----------
@@ -702,38 +702,132 @@ function updateGhost(now) {
 }
 
 // ---------- Menú ----------
-function stat(v, max) { return Math.round(Math.max(6, Math.min(100, v / max * 100))); }
-function renderCars() {
-  const el = $('cars'); el.innerHTML = '';
-  let group = null;
-  for (const def of manifest.cars) {
-    const cd = carDefs.get(def.id); if (!cd) continue; const P = cd.params;
-    if (def.group !== group) {
-      group = def.group;
-      const h = document.createElement('div'); h.className = 'car-group'; h.textContent = group; el.appendChild(h);
+// ---------- Garage: selección de auto ----------
+const MOTOR = ['Eléctrico', 'Nafta', 'A cuerda'];
+const RATING = ['Novato', 'Amateur', 'Avanzado', 'Semi-pro', 'Pro', 'Súper pro'];
+function carNums(P) {
+  const top = P.topEnd > 100 ? P.topEnd : P.topSpeed * 85.4;
+  const accRaw = P.acc;
+  const acc = Math.min(1900, Math.max(600, accRaw > 0 && accRaw < 15 ? accRaw * 175 : top / 2.4)); // igual que la física
+  const ws = P.wheels.filter(w => w.present);
+  const grip = ws.reduce((a, w) => a + (w.staticFriction || 1.5), 0) / Math.max(1, ws.length);
+  const steer = Math.min(3.5, Math.max(2, P.steerRate || 3)) * Math.min(0.6, Math.max(0.35, Math.max(...ws.map(w => Math.abs(w.steerRatio || 0)), 0.35)));
+  return { top, acc, mass: P.mass || 1.2, grip, steer };
+}
+let statMax = null;
+function statsRange() {
+  if (statMax) return statMax;
+  const all = manifest.cars.map(d => carDefs.get(d.id)).filter(Boolean).map(cd => carNums(cd.params));
+  const mm = k => [Math.min(...all.map(n => n[k])), Math.max(...all.map(n => n[k]))];
+  return (statMax = { top: mm('top'), acc: mm('acc'), mass: mm('mass'), grip: mm('grip'), steer: mm('steer') });
+}
+function pct(v, [lo, hi]) { return Math.round(15 + 85 * (hi > lo ? (v - lo) / (hi - lo) : 1)); }
+function drivetrain(P) {
+  const ws = P.wheels.filter(w => w.present), pw = ws.filter(w => w.powered);
+  if (pw.length >= ws.length) return '4x4';
+  const front = pw.every(w => w.offset1[2] > 0); // en Re-Volt z positivo es adelante
+  return front ? 'Tracción delantera' : 'Tracción trasera';
+}
+const garageGroups = () => [...new Set(manifest.cars.filter(d => carDefs.has(d.id)).map(d => d.group))];
+const carsIn = g => manifest.cars.filter(d => d.group === g && carDefs.has(d.id));
+
+// fotos de los autos: se sacan del modelo 3D con una cámara aparte
+const thumbs = new Map();
+let thumbR = null, thumbScene = null, thumbCam = null, thumbQueue = Promise.resolve();
+function carThumb(id) {
+  if (thumbs.has(id)) return thumbs.get(id);
+  const job = thumbQueue.then(async () => {
+    const cd = await ensureCar(id);
+    if (!thumbR) {
+      const c = document.createElement('canvas');
+      thumbR = new THREE.WebGLRenderer({ canvas: c, antialias: true, alpha: true, preserveDrawingBuffer: true });
+      thumbR.outputColorSpace = THREE.LinearSRGBColorSpace;
+      thumbR.setSize(320, 180, false);
+      thumbScene = new THREE.Scene();
+      thumbCam = new THREE.PerspectiveCamera(26, 16 / 9, 5, 5000);
     }
-    const top = P.topEnd > 100 ? P.topEnd : P.topSpeed * 85.4;
-    const b = document.createElement('button');
-    b.className = 'car'; b.type = 'button'; b.setAttribute('aria-pressed', def.id === G.carId);
-    const acc = P.acc > 0 && P.acc < 15 ? P.acc : top / 2.4 / 175;
-    b.innerHTML = `<b>${esc(P.name)}</b><span class="bars">
-      <span>VEL</span><span class="bar"><i style="width:${stat(top, 4500)}%"></i></span>
-      <span>ACC</span><span class="bar"><i style="width:${stat(acc, 9)}%"></i></span>
-      <span>PESO</span><span class="bar"><i style="width:${stat(P.mass, 2.2)}%"></i></span></span>`;
-    b.onclick = () => {
-      G.carId = def.id; store.set('rv.car', def.id);
-      audio.play('menuupdown', { vol: 0.5 });
-      [...el.querySelectorAll('.car')].forEach(c => c.setAttribute('aria-pressed', c === b));
-      spawnMyCar(0);
-      if (net) {
-        net.setCar(def.id);
-        if (net.active && !net.isHost) net.send({ t: 'car', car: def.id });
-        else if (net.active && net.isHost) { const me = net.players.get('host'); if (me) { me.car = def.id; net._roster(); } }
-      }
-    };
-    el.appendChild(b);
+    const vis = new CarVisual(id, thumbScene);
+    vis.root.rotation.y = Math.PI * 0.8;
+    vis.root.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(vis.root), c = box.getCenter(new THREE.Vector3());
+    const r = box.getSize(new THREE.Vector3()).length() / 2;
+    thumbCam.position.copy(c).add(new THREE.Vector3(0.55, 0.42, 1).normalize().multiplyScalar(r / Math.sin(THREE.MathUtils.degToRad(13)) * 0.62));
+    thumbCam.lookAt(c.clone().add(new THREE.Vector3(0, -r * 0.08, 0)));
+    thumbR.setClearColor(0x000000, 0);
+    thumbR.render(thumbScene, thumbCam);
+    const url = thumbR.domElement.toDataURL('image/png');
+    vis.dispose();
+    return url;
+  });
+  thumbQueue = job.catch(() => {});
+  thumbs.set(id, job);
+  return job;
+}
+
+let garageGroup = null;
+function selectCar(id, sound = true) {
+  if (!carDefs.has(id)) return;
+  G.carId = id; store.set('rv.car', id);
+  if (sound) audio.play('menuupdown', { vol: 0.5 });
+  garageGroup = carDef(id).group;
+  renderCars();
+  spawnMyCar(G.mode === 'lobby' ? lobbySlot() : 0);
+  if (net) {
+    net.setCar(id);
+    if (net.active && !net.isHost) net.send({ t: 'car', car: id });
+    else if (net.active && net.isHost) { const me = net.players.get('host'); if (me) { me.car = id; net._roster(); } }
   }
 }
+function stepCar(dir, inGroup = true) {
+  const list = inGroup ? carsIn(carDef(G.carId).group) : manifest.cars.filter(d => carDefs.has(d.id));
+  const i = list.findIndex(d => d.id === G.carId);
+  selectCar(list[(i + dir + list.length) % list.length].id);
+}
+function renderCars() {
+  const def = carDef(G.carId), P = carDefs.get(G.carId).params;
+  garageGroup ??= def.group;
+  // pestañas de grupos
+  const tabs = $('g-tabs');
+  tabs.innerHTML = garageGroups().map(g => `<button type="button" role="tab" aria-selected="${g === garageGroup}" data-g="${esc(g)}">${esc(g)}<small>${carsIn(g).length} autos</small></button>`).join('');
+  // tarjeta del auto elegido
+  const list = carsIn(def.group), idx = list.findIndex(d => d.id === G.carId);
+  $('g-name').textContent = P.name;
+  $('g-sub').textContent = `${def.group} · ${idx + 1} de ${list.length}`;
+  const img = $('g-shot'); img.alt = P.name;
+  const want = G.carId;
+  carThumb(want).then(u => { if (G.carId === want) img.src = u; }).catch(() => {});
+  const n = carNums(P), R = statsRange();
+  const kmh = Math.round(n.top * MPH_PER_UNIT * 1.609);
+  const row = (label, p, v = '') => `<dt>${label}</dt><dd><span class="bar"><i style="width:${p}%"></i></span></dd><dd class="v">${v}</dd>`;
+  $('g-stats').innerHTML =
+    row('Velocidad', pct(n.top, R.top), kmh + ' km/h') +
+    row('Aceleración', pct(n.acc, R.acc)) +
+    row('Agarre', pct(n.grip, R.grip)) +
+    row('Dirección', pct(n.steer, R.steer)) +
+    row('Peso', pct(n.mass, R.mass), n.mass.toFixed(1) + ' kg') +
+    `<div class="tags"><span>${MOTOR[P.cls] || MOTOR[0]}</span><span>${drivetrain(P)}</span>${P.rating >= 0 ? `<span>Nivel ${RATING[Math.min(5, P.rating | 0)]}</span>` : ''}</div>`;
+  // tira de fotos del grupo que se está mirando
+  const strip = $('g-strip');
+  strip.innerHTML = '';
+  for (const d of carsIn(garageGroup)) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.setAttribute('role', 'option'); b.setAttribute('aria-selected', d.id === G.carId);
+    b.innerHTML = `<img alt=""><span>${esc(carDefs.get(d.id).params.name)}</span>`;
+    b.onclick = () => selectCar(d.id);
+    strip.appendChild(b);
+    carThumb(d.id).then(u => { b.querySelector('img').src = u; }).catch(() => {});
+  }
+  strip.querySelector('[aria-selected=true]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  $('lc-name').textContent = P.name;
+}
+$('g-tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  garageGroup = b.dataset.g; audio.play('menuupdown', { vol: 0.4 }); renderCars();
+});
+$('g-prev').onclick = () => stepCar(-1);
+$('g-next').onclick = () => stepCar(1);
+$('lc-prev').onclick = () => stepCar(-1, false);
+$('lc-next').onclick = () => stepCar(1, false);
 
 // ---------- Sensibilidad de dirección ----------
 function setSteerSens(v, announce) {
@@ -935,6 +1029,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyR' && G.phys && (G.mode === 'race' || G.mode === 'practice')) G.phys.respawn();
   if (e.code === 'KeyC') G.camMode = (G.camMode + 1) % 3;
   if (['KeyF', 'KeyE', 'Enter', 'NumpadEnter'].includes(e.code) && !e.repeat && (G.mode === 'race' || G.mode === 'practice')) { e.preventDefault(); weapons.fire(); }
+  if (G.mode === 'menu' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight') && !e.repeat) stepCar(e.code === 'ArrowLeft' ? -1 : 1);
   if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Sonido apagado' : 'Sonido encendido');
   if (e.code === 'Equal' || e.code === 'NumpadAdd') setSteerSens(G.steerSens + 10, true);
   if (e.code === 'Minus' || e.code === 'NumpadSubtract') setSteerSens(G.steerSens - 10, true);
