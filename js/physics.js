@@ -20,7 +20,10 @@ export class CarPhysics {
     const I = params.inertia;
     this.invILocal = new THREE.Vector3(1 / Math.max(I[0], 50), 1 / Math.max(I[1], 50), 1 / Math.max(I[2], 50));
     this.top = params.topEnd > 100 ? params.topEnd : params.topSpeed * 85.4;
-    this.accel = Math.max(600, params.acc * 175);
+    // "Acc" en parameters.txt es una nota para las barras del menú original. Algunos autos
+    // (como el Panga) traen un valor fuera de escala; en ese caso se deriva de la velocidad máxima.
+    const accRaw = params.acc;
+    this.accel = Math.min(1900, Math.max(600, accRaw > 0 && accRaw < 15 ? accRaw * 175 : this.top / 2.4));
     this.pos = new THREE.Vector3();
     this.quat = new THREE.Quaternion();
     this.vel = new THREE.Vector3();
@@ -41,12 +44,13 @@ export class CarPhysics {
       };
     }).filter(w => w.present);
     const nW = this.wheels.length;
+    if (nW === 4) this.wheels.forEach((w, i) => { w.partner = this.wheels[i ^ 1]; });
     for (const w of this.wheels) {
       // Resorte calibrado para que en reposo la rueda quede cerca del centro de su recorrido
       const stiffMul = Math.sqrt((w.spring?.stiffness || 300) / 300);
       w.k = this.mass * GRAVITY / (nW * w.travel * 1.05) * stiffMul;
       const crit = 2 * Math.sqrt(w.k * this.mass / nW);
-      w.c = crit * 0.55 * Math.sqrt((w.spring?.damping || 7) / 7);
+      w.c = crit * 0.85 * Math.sqrt((w.spring?.damping || 7) / 7);
     }
     // Esferas de colisión de la carrocería
     const b = bodyBox; // THREE.Box3 en coords locales three
@@ -122,9 +126,10 @@ export class CarPhysics {
 
     // Dirección: se acerca al valor pedido según SteerRate, y se reduce con la velocidad
     const speedFrac = Math.min(1.2, Math.abs(vFwd) / this.top);
-    const steerLimit = 1 / (1 + speedFrac * (P.steerMod || 0.4) * 2.2);
+    // a más velocidad, menos ángulo de dirección (como en Re-Volt, según SteerMod)
+    const steerLimit = 1 / (1 + speedFrac * (P.steerMod || 0.4) * 6);
     const target = inp.steer * steerLimit;
-    this.steer += (target - this.steer) * Math.min(1, (P.steerRate || 3) * 2.2 * dt);
+    this.steer += (target - this.steer) * Math.min(1, (P.steerRate || 3) * 1.3 * dt);
 
     // Motor / freno
     let drive = 0, brake = 0;
@@ -172,6 +177,8 @@ export class CarPhysics {
       const vc = new THREE.Vector3().crossVectors(this.angVel, r).add(this.vel);
       const vUp = vc.dot(up);
       let N = w.k * w.comp - w.c * vUp;
+      // barra estabilizadora: compensa la diferencia de compresión con la rueda del otro lado del mismo eje
+      if (w.partner && w.partner.contact) N += w.k * 1.3 * (w.comp - w.partner.comp);
       if (w.comp > w.travel * 2) N += (w.comp - w.travel * 2) * w.k * 6; // tope de suspensión
       N = Math.max(0, N);
       // Carga aerodinámica (DownForceMod)
@@ -180,7 +187,7 @@ export class CarPhysics {
 
       // Ejes de la rueda
       // input.steer > 0 = izquierda. Ruedas con SteerRatio negativo (delanteras) giran hacia el mismo lado.
-      const sa = w.turnable ? this.steer * 0.9 * Math.abs(w.steerRatio || 0.5) * (w.steerRatio > 0 ? -1 : 1) : 0;
+      const sa = w.turnable ? this.steer * 0.75 * Math.abs(w.steerRatio || 0.5) * (w.steerRatio > 0 ? -1 : 1) : 0;
       w.steerAngle = sa;
       const fLocal = new THREE.Vector3(-Math.sin(sa), 0, -Math.cos(sa));
       const f = fLocal.applyQuaternion(this.quat);
@@ -199,7 +206,7 @@ export class CarPhysics {
       const slip = Math.atan2(vS, Math.abs(vF) + 40);
       let mu = (w.staticFriction || 1.5) * 1.15;
       if (inp.handbrake && !w.turnable) mu = (w.kineticFriction || 1.4) * 0.45;
-      const peak = 0.14;
+      const peak = 0.2;
       let Fs = -mu * Nt * Math.max(-1, Math.min(1, slip / peak));
       // estabilizador a baja velocidad: evita que el auto se deslice parado en pendientes
       if (Math.abs(vF) < 80) Fs = Math.max(-mu * Nt, Math.min(mu * Nt, -vS * m / nW / dt * 0.4));
@@ -211,7 +218,7 @@ export class CarPhysics {
 
       const force = new THREE.Vector3().addScaledVector(up, N).addScaledVector(f, Fl).addScaledVector(s, Fs);
       // aplicar las fuerzas del neumático un poco por encima del piso para reducir el vuelco
-      const app = hit.point.clone().addScaledVector(up, Math.max(0, up.dot(_v3.copy(this.pos).sub(hit.point))) * 0.75);
+      const app = hit.point.clone().addScaledVector(up, Math.max(0, up.dot(_v3.copy(this.pos).sub(hit.point))) * 0.95);
       F.add(force);
       T.add(new THREE.Vector3().crossVectors(app.sub(this.pos), force));
 
@@ -261,7 +268,7 @@ export class CarPhysics {
       const n = _v2.copy(wc).sub(res.point); const dist = n.length();
       if (dist < 1e-4) continue;
       n.divideScalar(dist);
-      if (n.dot(upW) > 0.7) continue; // es piso: lo maneja la suspensión
+      if (Math.abs(n.dot(upW)) > 0.35) continue; // piso o bordes inclinados: lo maneja la suspensión
       const pen = wr - dist;
       const low = upW.dot(_v3.copy(res.point).sub(wc)) < -wr * 0.15;
       if (low) {

@@ -192,6 +192,7 @@ const G = {
   lap: { cur: 0, started: false, done: 0, lapStart: 0, best: null, finished: false, finishTime: 0 },
   remotes: new Map(), // id -> {vis, carId, name, pos, quat, vel, tpos, tquat, prog, fin}
   results: [], camMode: 0, online: false,
+  prevPos: null, prevQuat: null, renderPos: new THREE.Vector3(), renderQuat: new THREE.Quaternion(),
 };
 let net = null;
 
@@ -519,7 +520,9 @@ function carScale() {
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 let camInit = false, orbit = 0;
 function updateCamera(dt) {
-  const P = G.phys; if (!P) return;
+  if (!G.phys) return;
+  // la cámara sigue la posición interpolada (la que se ve), no la de física
+  const P = { pos: G.renderPos, quat: G.renderQuat };
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(P.quat); fwd.y *= 0.3; fwd.normalize();
   let want, look;
   if (G.mode === 'menu' || G.mode === 'lobby' || G.mode === 'results') {
@@ -567,6 +570,8 @@ function frame(now) {
 
   acc += dt;
   while (acc >= FIXED) {
+    // guardar el estado anterior para interpolar el dibujo entre pasos de física
+    G.prevPos = G.phys.pos.clone(); G.prevQuat = G.phys.quat.clone();
     G.phys.step(FIXED);
     for (const r of G.remotes.values()) if (r.tpos && now - r.seen < 2000) G.phys.collideCar(r.pos, r.vel, r.radius);
     acc -= FIXED;
@@ -574,7 +579,13 @@ function frame(now) {
 
   // Visual propio
   const P = G.phys;
-  G.vis.root.position.copy(P.pos); G.vis.root.quaternion.copy(P.quat);
+  // Interpolación: la física corre a 60 Hz, pero el monitor puede ir a 75, 120 o 144 Hz.
+  // Dibujamos el auto entre el paso anterior y el actual para que no avance a saltos.
+  const alpha = Math.min(1, acc / FIXED);
+  if (G.prevPos && G.prevPos.distanceToSquared(P.pos) < 500 * 500) {
+    G.renderPos.lerpVectors(G.prevPos, P.pos, alpha); G.renderQuat.slerpQuaternions(G.prevQuat, P.quat, alpha);
+  } else { G.renderPos.copy(P.pos); G.renderQuat.copy(P.quat); }
+  G.vis.root.position.copy(G.renderPos); G.vis.root.quaternion.copy(G.renderQuat);
   G.vis.setWheels(P.wheels.map(w => w.suspOffset), P.wheels.map(w => w.steerAngle || 0), P.wheels.map(w => w.spin));
 
   // Remotos: interpolación suave
