@@ -1,0 +1,194 @@
+{
+ "cars": [
+  {
+   "id": "rc",
+   "name": "RC Bandit",
+   "models": {
+    "0": "body.prm",
+    "1": "wheelfl.prm",
+    "2": "wheelfr.prm",
+    "3": "wheelbl.prm",
+    "4": "wheelbr.prm"
+   }
+  },
+  {
+   "id": "moss",
+   "name": "Col. Moss",
+   "models": {
+    "0": "body.prm",
+    "1": "wheelfl.prm",
+    "2": "wheelfr.prm",
+    "3": "wheelbl.prm",
+    "4": "wheelbr.prm"
+   }
+  },
+  {
+   "id": "adeon",
+   "name": "Adeon",
+   "models": {
+    "0": "body.prm",
+    "1": "wheelfl.prm",
+    "2": "wheelfr.prm",
+    "3": "wheelbl.prm",
+    "4": "wheelbr.prm"
+   }
+  },
+  {
+   "id": "amw",
+   "name": "AMW",
+   "models": {
+    "0": "body.prm",
+    "1": "wheelfl.prm",
+    "2": "wheelfr.prm",
+    "3": "wheelbl.prm",
+    "4": "wheelbr.prm"
+   }
+  },
+  {
+   "id": "volken",
+   "name": "Volken Turbo",
+   "models": {
+    "0": "body.prm",
+    "1": "wheelfl.prm",
+    "2": "wheelfr.prm",
+    "3": "wheelbl.prm",
+    "4": "wheelbr.prm"
+   }
+  },
+  {
+   "id": "mite",
+   "name": "Dust Mite",
+   "models": {
+    "0": "body.prm",
+    "1": "wheelfl.prm",
+    "2": "wheelfr.prm",
+    "3": "wheelbl.prm",
+    "4": "wheelbr.prm"
+   }
+  },
+  {
+   "id": "panga",
+   "name": "Panga",
+   "models": {
+    "0": "body.prm",
+    "1": "wheelfl.prm",
+    "2": "wheelfr.prm",
+    "3": "wheelbl.prm",
+    "4": "wheelbr.prm"
+   }
+  },
+  {
+   "id": "dino",
+   "name": "RC San",
+   "models": {
+    "0": "body.prm",
+    "1": "wheelfl.prm",
+    "2": "wheelfr.prm",
+    "3": "wheelbl.prm",
+    "4": "wheelbr.prm"
+   }
+  }
+ ],
+ "track": {
+  "id": "nhood1",
+  "name": "Toys in the Hood 1",
+  "pages": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9
+  ],
+  "instances": {
+   "hoop": {
+    "prm": "hoop.prm",
+    "solid": false
+   },
+   "tree2": {
+    "prm": "tree2.prm",
+    "solid": true
+   },
+   "seat1": {
+    "prm": "seat1.prm",
+    "solid": false
+   },
+   "steer": {
+    "prm": "steer.prm",
+    "solid": false
+   },
+   "startrev": {
+    "prm": "startrev.prm",
+    "solid": false
+   },
+   "bmw": {
+    "prm": "bmw.prm",
+    "solid": true
+   },
+   "ramp1": {
+    "prm": "ramp1.prm",
+    "solid": true
+   },
+   "tree1": {
+    "prm": "tree1.prm",
+    "solid": false
+   },
+   "start": {
+    "prm": "start.prm",
+    "solid": false
+   },
+   "barrierp": {
+    "prm": "barrierpole.prm",
+    "solid": true
+   },
+   "seat2": {
+    "prm": "seat2.prm",
+    "solid": false
+   },
+   "whitepos": {
+    "prm": "whitepost.prm",
+    "solid": true
+   },
+   "ramp3": {
+    "prm": "ramp3.prm",
+    "solid": true
+   },
+   "carbase": {
+    "prm": "carbase.prm",
+    "solid": true
+   },
+   "lampost": {
+    "prm": "lampost.prm",
+    "solid": true
+   },
+   "house1": {
+    "prm": "house1.prm",
+    "solid": false
+   },
+   "bmw2": {
+    "prm": "bmw2.prm",
+    "solid": true
+   },
+   "bin": {
+    "prm": "bin.prm",
+    "solid": true
+   },
+   "barrier": {
+    "prm": "barrier.prm",
+    "solid": true
+   },
+   "house2": {
+    "prm": "house2.prm",
+    "solid": false
+   },
+   "skate": {
+    "prm": "skate.prm",
+    "solid": true
+   }
+  }
+ }
+}
