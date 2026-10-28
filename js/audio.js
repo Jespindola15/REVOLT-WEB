@@ -63,6 +63,20 @@ export class GameAudio {
     } catch (e) {}
   }
 
+  // Efecto que suena desde un punto del mundo (explosiones, disparos de los rivales)
+  async playAt(name, pos, { vol = 1, rate = 1 } = {}) {
+    if (!this.ctx || this.muted) return;
+    try {
+      const buf = await this.load('sfx/' + name + '.wav');
+      const src = this.ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate;
+      const g = this.ctx.createGain(); g.gain.value = vol;
+      const p = this.ctx.createPanner();
+      p.panningModel = 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = 300; p.rolloffFactor = 1.2; p.maxDistance = 15000;
+      if (p.positionX) { p.positionX.value = pos.x; p.positionY.value = pos.y; p.positionZ.value = pos.z; } else p.setPosition(pos.x, pos.y, pos.z);
+      src.connect(g); g.connect(p); p.connect(this.sfxBus); src.start();
+    } catch (e) {}
+  }
+
   // Golpe (contra la pista o contra otro auto); no más de uno cada 120 ms
   hit(strength) {
     if (!this.ctx) return;

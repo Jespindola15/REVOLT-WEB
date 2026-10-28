@@ -5,6 +5,7 @@ import { loadTexture, makeMaterials, buildMeshes } from './build.js';
 import { CarPhysics, MPH_PER_UNIT, carSpheresFromBox } from './physics.js';
 import { Net } from './net.js';
 import { GameAudio } from './audio.js';
+import { Weapons, WEAPONS } from './weapons.js';
 
 THREE.ColorManagement.enabled = false;
 
@@ -93,7 +94,18 @@ async function buildTrack(T) {
   const skyGroup = await buildSky(dir, T.sky || {});
   let path = null;
   try { path = parsePAN(await fetchBuf(dir + T.id + '.pan')); } catch (e) {}
-  return { id: T.id, name: T.name, inf, zones, nZones, path, group: built.group, sky: skyGroup, bvh, bg, fog, far };
+  // bonus de armas: objetos tipo 30 ("pickup") del .fob, en los mismos lugares que en el juego original
+  const pickups = [];
+  try {
+    const dv = new DataView(await fetchBuf(dir + T.id + '.fob'));
+    const n = dv.getInt32(0, true);
+    for (let i = 0; i < n; i++) {
+      const o = 4 + i * 56;
+      if (dv.getInt32(o, true) !== 30) continue;
+      pickups.push(new THREE.Vector3(...rv2three(dv.getFloat32(o + 20, true), dv.getFloat32(o + 24, true), dv.getFloat32(o + 28, true))));
+    }
+  } catch (e) {}
+  return { id: T.id, name: T.name, inf, zones, nZones, path, pickups, group: built.group, sky: skyGroup, bvh, bg, fog, far };
 }
 
 function loadTrackCached(id) {
@@ -118,6 +130,7 @@ async function setTrack(id) {
       track = T; world = { bvh: T.bvh };
       G.pathHint = { from: null };
       audio.setMusic(def.music ? 'tracks/' + def.id + '/' + def.music : null);
+      weapons.setTrack(T);
     }
     G.trackId = def.id;
     return T;
@@ -438,6 +451,8 @@ async function startPractice() {
   await setTrack(G.trackId);
   await spawnMyCar(0);
   G.mode = 'practice'; G.online = false; G.laps = Infinity;
+  G.myPlace = 1; G.nPlace = 1;
+  weapons.clearAll();
   show(null); startCountdown(performance.now());
 }
 
@@ -447,6 +462,7 @@ async function startRace(laps, grid, trackId) {
   const idx = Math.max(0, grid.indexOf(net.myId));
   await spawnMyCar(idx);
   G.mode = 'race'; G.laps = laps;
+  weapons.clearAll();
   show(null); startCountdown(performance.now());
 }
 
@@ -549,14 +565,14 @@ $('btn-start').onclick = () => {
 $('btn-leave').onclick = () => { net?.close(); net = null; clearRemotes(); G.online = false; toMenu(); };
 $('btn-res-back').onclick = () => { if (G.online && net?.active) { G.mode = 'lobby'; spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu(); };
 $('btn-quit').onclick = () => {
-  if (G.online && net?.active) { G.mode = 'lobby'; spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu();
+  if (G.online && net?.active) { G.mode = 'lobby'; weapons.clearAll(); spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu();
 };
 
 // lugar en la grilla según el orden de la sala (así en la sala nadie aparece encima de otro)
 function lobbySlot() { return net?.active ? Math.max(0, [...net.players.keys()].indexOf(net.myId)) : 0; }
 let lastLobbySlot = -1;
 
-function toMenu() { G.mode = 'menu'; G.locked = true; renderTrackButtons($('tracksel')); spawnMyCar(0); show('scr-menu'); }
+function toMenu() { G.mode = 'menu'; G.locked = true; weapons.clearAll(); renderTrackButtons($('tracksel')); spawnMyCar(0); show('scr-menu'); }
 
 // ---------- Selección de pista ----------
 function renderTrackButtons(el) {
@@ -623,10 +639,11 @@ const netHandlers = {
     const r = ensureRemote(d.id, d.car || pl?.car || 'rc', pl?.name);
     r.tpos = new THREE.Vector3(...d.p); r.tquat.set(...d.q); r.vel.set(...d.v);
     if (r.pos.y < -9e4) { r.pos.copy(r.tpos); r.quat.copy(r.tquat); }
-    r.susp = d.su; r.steer = d.st; r.prog = d.pr; r.seen = performance.now();
+    r.susp = d.su; r.steer = d.st; r.prog = d.pr; r.fx = d.fx | 0; r.seen = performance.now();
   },
   onEvent: d => {
     if (d.t === 'start') { startRace(d.laps, d.grid, d.track); }
+    else if (['pk', 'wf', 'pb', 'wb', 'gp'].includes(d.t)) weapons.onNet(d);
     else if (d.t === 'rank') { if (Array.isArray(d.order)) G.rank = { order: d.order.map(String), at: performance.now() }; }
     else if (d.t === 'track') {
       const tid = d.track;
@@ -650,6 +667,7 @@ window.addEventListener('keydown', e => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (e.code === 'KeyR' && G.phys && (G.mode === 'race' || G.mode === 'practice')) G.phys.respawn();
   if (e.code === 'KeyC') G.camMode = (G.camMode + 1) % 3;
+  if (['KeyF', 'KeyE', 'Enter', 'NumpadEnter'].includes(e.code) && !e.repeat && (G.mode === 'race' || G.mode === 'practice')) { e.preventDefault(); weapons.fire(); }
   if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Sonido apagado' : 'Sonido encendido');
   if (e.code === 'Equal' || e.code === 'NumpadAdd') setSteerSens(G.steerSens + 10, true);
   if (e.code === 'Minus' || e.code === 'NumpadSubtract') setSteerSens(G.steerSens - 10, true);
@@ -660,11 +678,11 @@ window.addEventListener('blur', () => keys.clear());
 const touchState = { left: false, right: false, gas: false, back: false };
 document.querySelectorAll('#touch button').forEach(b => {
   const k = b.dataset.k;
-  const on = e => { e.preventDefault(); touchState[k] = true; b.classList.add('on'); };
+  const on = e => { e.preventDefault(); touchState[k] = true; b.classList.add('on'); if (k === 'fire') weapons.fire(); };
   const off = e => { e.preventDefault(); touchState[k] = false; b.classList.remove('on'); };
   b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('pointerleave', off);
 });
-let padRespawnHeld = false;
+let padRespawnHeld = false, padFireHeld = false;
 function readInput() {
   let throttle = 0, steer = 0, hb = false;
   if (keys.has('ArrowUp') || keys.has('KeyW')) throttle += 1;
@@ -684,6 +702,8 @@ function readInput() {
     if (gp.buttons[0]?.pressed) throttle += 1;
     if (gp.buttons[2]?.pressed) throttle -= 1;
     if (gp.buttons[1]?.pressed || gp.buttons[5]?.pressed) hb = true;
+    if (gp.buttons[4]?.pressed && !padFireHeld) weapons.fire();
+    padFireHeld = !!gp.buttons[4]?.pressed;
     const y = gp.buttons[3]?.pressed;
     if (y && !padRespawnHeld && G.phys) G.phys.respawn();
     padRespawnHeld = !!y;
@@ -697,6 +717,33 @@ function readInput() {
 const audio = new GameAudio(store);
 function engineUrl(carId) { return carDef(carId)?.engine || 'sfx/moto.wav'; }
 function carTop(carId) { const P = carDefs.get(carId)?.params; return P ? (P.topEnd > 100 ? P.topEnd : P.topSpeed * 85.4) : 3000; }
+// ---------- Armas ----------
+// Lo que el sistema de armas necesita saber del juego
+const weapons = new Weapons(scene, audio, {
+  me: () => G.phys ? { id: net?.active ? net.myId : 'me', phys: G.phys, pos: G.phys.pos, renderPos: G.renderPos, quat: G.phys.quat,
+    active: (G.mode === 'race' || G.mode === 'practice') && !G.locked && !G.lap.finished } : null,
+  others: () => G.others || [],
+  send: msg => { if (net?.active) net.send(msg); },
+  bvh: () => world?.bvh,
+  place: () => ({ place: G.myPlace || 1, total: G.nPlace || 1 }),
+  myProg: () => progressValue(),
+  toast: msg => toast(msg),
+  shake: a => { G.shake = Math.max(G.shake || 0, a); },
+});
+let weaponKey = '';
+function updateWeaponHud() {
+  const el = $('h-weapon');
+  const k = weapons.held, key = k ? k + weapons.shots : weapons.bomb ? 'bomb' : '';
+  if (key === weaponKey) return;
+  weaponKey = key;
+  el.hidden = !key;
+  if (!key) return;
+  const W = k ? WEAPONS[k] : WEAPONS.putty;
+  const ic = el.querySelector('i'); ic.style.setProperty('--wx', W.icon[0]); ic.style.setProperty('--wy', W.icon[1]);
+  el.querySelector('b').textContent = k ? W.name + (weapons.shots > 1 ? ' ×' + weapons.shots : '') : '¡BOMBA! CHOCÁ A ALGUIEN';
+  el.querySelector('small').hidden = !k;
+  el.classList.toggle('danger', !k);
+}
 // el navegador solo deja sonar después de una interacción
 window.addEventListener('pointerdown', () => audio.unlock());
 window.addEventListener('keydown', () => audio.unlock());
@@ -757,6 +804,11 @@ function updateCamera(dt) {
   }
   camPos.copy(want); camLook.copy(look); camInit = true;
   camera.position.copy(camPos); camera.lookAt(camLook);
+  // sacudón de la cámara con las explosiones
+  if (G.shake > 0.01) {
+    camera.position.add(new THREE.Vector3((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18).multiplyScalar(G.shake));
+    G.shake *= Math.exp(-dt * 5);
+  }
 }
 
 // Clasificación oficial: la arma el anfitrión con el progreso que le reporta cada jugador
@@ -830,6 +882,7 @@ function updateStandings(now) {
   if (rank && list.every(x => rank.includes(x.id))) list.sort((a, b) => rank.indexOf(a.id) - rank.indexOf(b.id));
   else list.sort((a, b) => Math.abs(a.prog - b.prog) < 4e-4 ? (a.id < b.id ? -1 : 1) : b.prog - a.prog);
   const myPos = list.findIndex(x => x.me) + 1;
+  G.myPlace = myPos; G.nPlace = list.length;
   $('h-pos').textContent = others.length ? myPos + '°/' + list.length : '';
   const box = $('h-standings');
   box.hidden = !others.length;
@@ -869,11 +922,12 @@ function frame(now) {
     G.prevPos = G.phys.pos.clone(); G.prevQuat = G.phys.quat.clone();
     G.phys.step(FIXED);
     // choques entre autos solo durante la carrera (en la sala los autos están quietos en la grilla)
-    if (G.mode === 'race') for (const r of G.remotes.values()) {
+    if (G.mode === 'race') for (const [id, r] of G.remotes) {
       if (!r.vis || !r.tpos || now - r.seen > 2000) continue;
       const cd = carDefs.get(r.carId); if (!cd?.spheres) continue;
       const hit = G.phys.collideWithCar({ pos: r.pos, quat: r.quat, vel: r.vel, spheres: cd.spheres, mass: cd.params.mass || 1.2 });
       if (hit > 300) audio.hit(Math.min(1, hit / 2000));
+      if (hit) weapons.onCarContact(id);
     }
     acc -= FIXED;
   }
@@ -902,6 +956,13 @@ function frame(now) {
   }
 
   if (driving) updateLaps(now);
+  G.others = [];
+  for (const [id, r] of G.remotes) {
+    if (!r.vis || !r.tpos) continue;
+    G.others.push({ id, pos: r.pos, vel: r.vel, quat: r.quat, fx: r.fx | 0, prog: r.prog || 0, visible: r.vis.root.visible && now - r.seen < 2000 });
+  }
+  weapons.update(dt, now);
+  if (driving) updateWeaponHud();
   updateCamera(dt);
   if (track) track.sky.position.copy(camera.position);
 
@@ -911,7 +972,7 @@ function frame(now) {
     netT = 0;
     const r1 = v => Math.round(v * 10) / 10, r3 = v => Math.round(v * 1000) / 1000;
     net.send({ t: 'state', car: G.carId, p: [r1(P.pos.x), r1(P.pos.y), r1(P.pos.z)], q: [r3(P.quat.x), r3(P.quat.y), r3(P.quat.z), r3(P.quat.w)],
-      v: [r1(P.vel.x), r1(P.vel.y), r1(P.vel.z)], su: P.wheels.map(w => r1(w.suspOffset)), st: P.wheels.map(w => r3(w.steerAngle || 0)), pr: (G.lastSentProg = G.mode === 'race' ? progressValue() : 0) });
+      v: [r1(P.vel.x), r1(P.vel.y), r1(P.vel.z)], su: P.wheels.map(w => r1(w.suspOffset)), st: P.wheels.map(w => r3(w.steerAngle || 0)), pr: (G.lastSentProg = G.mode === 'race' ? progressValue() : 0), fx: weapons.myFxBits() });
     // el anfitrión arma la clasificación y la reparte (así todos ven el mismo orden)
     if (net.isHost && G.mode === 'race' && now - (G.rankSent || 0) > 250) { G.rankSent = now; broadcastRank(); }
   }
@@ -957,6 +1018,10 @@ async function boot() {
     if (!mr.ok) throw new Error('falta manifest.json (subí la carpeta assets o su contenido)');
     manifest = normalizeManifest(await mr.json());
     audio.setBase(BASE);
+    try {
+      await weapons.init(BASE, manifest.fx);
+      if (manifest.fx?.fxpage2) document.documentElement.style.setProperty('--wicons', `url("${BASE}${manifest.fx.fxpage2}")`);
+    } catch (e) { console.warn('Sin armas:', e); }
     $('loadmsg').textContent = 'Autos';
     await Promise.all(manifest.cars.map(loadCarParams));
     if (!carDefs.has(G.carId)) G.carId = manifest.cars[0].id;
@@ -972,7 +1037,7 @@ async function boot() {
     await spawnMyCar(0);
     G.mode = 'menu'; show('scr-menu');
     $('loading').hidden = true;
-    window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate, audio };
+    window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate, audio, weapons, THREE, gridSlot };
   } catch (e) {
     console.error(e);
     $('loadmsg').textContent = 'No se pudo cargar: ' + e.message + '. Si abriste el archivo con doble clic, tiene que estar subido a una página web (ver LEEME).';

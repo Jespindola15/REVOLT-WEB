@@ -256,28 +256,48 @@
     "9": "tex9.png"
    },
    "instances": {
-    "barrier": {
-     "prm": "barrier.prm",
+    "tree1": {
+     "prm": "tree1.prm",
+     "solid": false
+    },
+    "bin": {
+     "prm": "bin.prm",
      "solid": true
     },
-    "tree2": {
-     "prm": "tree2.prm",
+    "carbase": {
+     "prm": "carbase.prm",
      "solid": true
+    },
+    "ramp3": {
+     "prm": "ramp3.prm",
+     "solid": true
+    },
+    "bmw2": {
+     "prm": "bmw2.prm",
+     "solid": true
+    },
+    "ramp1": {
+     "prm": "ramp1.prm",
+     "solid": true
+    },
+    "seat1": {
+     "prm": "seat1.prm",
+     "solid": false
     },
     "startrev": {
      "prm": "startrev.prm",
      "solid": false
     },
-    "tree1": {
-     "prm": "tree1.prm",
+    "steer": {
+     "prm": "steer.prm",
      "solid": false
     },
-    "seat2": {
-     "prm": "seat2.prm",
+    "house1": {
+     "prm": "house1.prm",
      "solid": false
     },
-    "barrierp": {
-     "prm": "barrierpole.prm",
+    "whitepos": {
+     "prm": "whitepost.prm",
      "solid": true
     },
     "bmw": {
@@ -288,56 +308,36 @@
      "prm": "lampost.prm",
      "solid": true
     },
-    "house2": {
-     "prm": "house2.prm",
+    "seat2": {
+     "prm": "seat2.prm",
      "solid": false
     },
-    "ramp3": {
-     "prm": "ramp3.prm",
+    "hoop": {
+     "prm": "hoop.prm",
+     "solid": false
+    },
+    "barrier": {
+     "prm": "barrier.prm",
      "solid": true
     },
     "skate": {
      "prm": "skate.prm",
      "solid": true
     },
-    "hoop": {
-     "prm": "hoop.prm",
+    "house2": {
+     "prm": "house2.prm",
      "solid": false
     },
     "start": {
      "prm": "start.prm",
      "solid": false
     },
-    "house1": {
-     "prm": "house1.prm",
-     "solid": false
-    },
-    "ramp1": {
-     "prm": "ramp1.prm",
+    "barrierp": {
+     "prm": "barrierpole.prm",
      "solid": true
     },
-    "bin": {
-     "prm": "bin.prm",
-     "solid": true
-    },
-    "seat1": {
-     "prm": "seat1.prm",
-     "solid": false
-    },
-    "bmw2": {
-     "prm": "bmw2.prm",
-     "solid": true
-    },
-    "steer": {
-     "prm": "steer.prm",
-     "solid": false
-    },
-    "carbase": {
-     "prm": "carbase.prm",
-     "solid": true
-    },
-    "whitepos": {
-     "prm": "whitepost.prm",
+    "tree2": {
+     "prm": "tree2.prm",
      "solid": true
     }
    },
@@ -364,80 +364,100 @@
     "6": "tex6.jpg"
    },
    "instances": {
-    "ball": {
-     "prm": "ball.prm",
-     "solid": false
-    },
-    "carboxb": {
-     "prm": "carboxb.prm",
+    "nelly": {
+     "prm": "nelly.prm",
      "solid": true
     },
-    "walker": {
-     "prm": "walker.prm",
+    "carboxc": {
+     "prm": "carboxc.prm",
      "solid": true
     },
-    "carboxd": {
-     "prm": "carboxd.prm",
-     "solid": true
-    },
-    "bspotgl": {
-     "prm": "bspotgl.prm",
-     "solid": false
-    },
-    "gator": {
-     "prm": "gator.prm",
+    "carboxa": {
+     "prm": "carboxa.prm",
      "solid": true
     },
     "genboxc": {
      "prm": "genboxc.prm",
      "solid": true
     },
-    "hopper": {
-     "prm": "hopper.prm",
-     "solid": false
+    "rocketpa": {
+     "prm": "rocketpad.prm",
+     "solid": true
+    },
+    "chest": {
+     "prm": "chest.prm",
+     "solid": true
+    },
+    "genbox": {
+     "prm": "genbox.prm",
+     "solid": true
     },
     "duplo": {
      "prm": "duplo.prm",
      "solid": true
     },
-    "genboxb": {
-     "prm": "genboxb.prm",
+    "carboxb": {
+     "prm": "carboxb.prm",
      "solid": true
     },
-    "spire": {
-     "prm": "spire.prm",
+    "bspotgl": {
+     "prm": "bspotgl.prm",
+     "solid": false
+    },
+    "shelf": {
+     "prm": "shelf.prm",
+     "solid": false
+    },
+    "palm": {
+     "prm": "palm.prm",
+     "solid": false
+    },
+    "gator": {
+     "prm": "gator.prm",
      "solid": true
     },
-    "teddy": {
-     "prm": "teddy.prm",
+    "hopper": {
+     "prm": "hopper.prm",
+     "solid": false
+    },
+    "ball": {
+     "prm": "ball.prm",
+     "solid": false
+    },
+    "drawer": {
+     "prm": "drawer.prm",
      "solid": true
     },
-    "rocketpa": {
-     "prm": "rocketpad.prm",
+    "spotgl": {
+     "prm": "spotgl.prm",
+     "solid": false
+    },
+    "genboxd": {
+     "prm": "genboxd.prm",
      "solid": true
     },
     "tallbox": {
      "prm": "tallbox.prm",
      "solid": false
     },
-    "cardbox": {
-     "prm": "cardbox.prm",
+    "walker": {
+     "prm": "walker.prm",
      "solid": true
     },
-    "drawer": {
-     "prm": "drawer.prm",
+    "teddy": {
+     "prm": "teddy.prm",
      "solid": true
     },
-    "shelf": {
-     "prm": "shelf.prm",
+    "genboxb": {
+     "prm": "genboxb.prm",
+     "solid": true
+    },
+    "truck": {
+     "prm": "truck.prm",
      "solid": false
     },
-    "genbox": {
-     "prm": "genbox.prm",
-     "solid": true
-    },
-    "chest": {
-     "prm": "chest.prm",
+    "cardbox": {
+     "prm": "cardbox.prm",
      "solid": true
     },
     "hidepoly": {
@@ -448,36 +468,20 @@
      "prm": "robot.prm",
      "solid": false
     },
-    "truck": {
-     "prm": "truck.prm",
-     "solid": false
+    "dozer": {
+     "prm": "dozer.prm",
+     "solid": true
+    },
+    "spire": {
+     "prm": "spire.prm",
+     "solid": true
+    },
+    "carboxd": {
+     "prm": "carboxd.prm",
+     "solid": true
     },
     "bot_box": {
      "prm": "bot_box.prm",
-     "solid": true
-    },
-    "carboxc": {
-     "prm": "carboxc.prm",
-     "solid": true
-    },
-    "palm": {
-     "prm": "palm.prm",
-     "solid": false
-    },
-    "genboxd": {
-     "prm": "genboxd.prm",
-     "solid": true
-    },
-    "nelly": {
-     "prm": "nelly.prm",
-     "solid": true
-    },
-    "carboxa": {
-     "prm": "carboxa.prm",
-     "solid": true
-    },
-    "dozer": {
-     "prm": "dozer.prm",
      "solid": true
     },
     "bigrocke": {
@@ -487,10 +491,6 @@
     "crane": {
      "prm": "crane.prm",
      "solid": true
-    },
-    "spotgl": {
-     "prm": "spotgl.prm",
-     "solid": false
     }
    },
    "sky": {},
@@ -573,5 +573,14 @@
   "fuse",
   "splash",
   "servo"
- ]
+ ],
+ "fx": {
+  "pickup": "fx/pickup.prm",
+  "firework": "fx/firework.prm",
+  "wbomb": "fx/wbomb.prm",
+  "star": "fx/star.prm",
+  "fxpage1": "fx/fxpage1.jpg",
+  "fxpage2": "fx/fxpage2.png",
+  "fxpage3": "fx/fxpage3.jpg"
+ }
 }

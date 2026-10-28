@@ -119,6 +119,18 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
 .standings li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .standings li em { font-style: normal; font-size: 11px; color: var(--muted); letter-spacing: 1px; }
 
+/* arma que tenés */
+.weapon { position: absolute; left: 50%; bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 58px); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: rgba(18,22,43,.82); border: 2px solid var(--volt); border-radius: 6px; padding: 4px 12px 4px 4px; box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
+.weapon i { width: 64px; height: 64px; background: var(--wicons) no-repeat; background-size: 512px 512px; background-position: calc(var(--wx, 0) * -2px) calc(var(--wy, 0) * -2px); flex: none; }
+.weapon b { font-family: var(--display); font-weight: 400; font-size: 18px; color: var(--volt); letter-spacing: .5px; white-space: nowrap; }
+.weapon small { font-size: 12px; color: var(--muted); font-weight: 700; letter-spacing: 1px; white-space: nowrap; }
+.weapon small kbd { font-family: var(--body); color: var(--paper); background: var(--ink-2); border: 1px solid var(--ink-3); border-radius: 3px; padding: 0 5px; }
+.weapon.danger { border-color: var(--coral); animation: blink .5s steps(2, start) infinite; }
+.weapon.danger b { color: var(--coral); }
+@media (prefers-reduced-motion: reduce) { .weapon.danger { animation: none; } }
+@media (max-width: 640px) { .weapon { bottom: 110px; } .weapon i { width: 48px; height: 48px; background-size: 384px 384px; background-position: calc(var(--wx, 0) * -1.5px) calc(var(--wy, 0) * -1.5px); } }
+#touch button[data-k=fire] { border-color: var(--coral); color: var(--coral); font-size: 15px; }
+
 /* controles táctiles */
 #touch { position: fixed; inset: auto 0 0 0; display: flex; justify-content: space-between; padding: 0 max(16px, env(safe-area-inset-right, 0px)) max(20px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); pointer-events: none; }
 #touch .grp { display: flex; gap: 12px; pointer-events: auto; }
@@ -250,15 +262,16 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
   <div class="center-msg" id="h-center" hidden></div>
   <div class="toast" id="h-toast" hidden></div>
   <div class="speedo"><b id="h-speed">0</b><span>KM/H</span></div>
+  <div class="weapon" id="h-weapon" hidden><i></i><div><b></b><br><small>usar con <kbd>F</kbd> o <kbd>Enter</kbd></small></div></div>
   <div class="keys">
     <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> o <kbd>WASD</kbd> manejar · <kbd>Espacio</kbd> freno de mano<br>
-    <kbd>R</kbd> reaparecer · <kbd>C</kbd> cámara · <kbd>M</kbd> sonido · <kbd>+</kbd><kbd>−</kbd> sensibilidad · también joystick
+    <kbd>F</kbd> usar arma · <kbd>R</kbd> reaparecer · <kbd>C</kbd> cámara · <kbd>M</kbd> sonido · <kbd>+</kbd><kbd>−</kbd> sensibilidad · también joystick
   </div>
 </div>
 
 <div id="touch" hidden>
   <div class="grp"><button data-k="left" aria-label="Izquierda">◀</button><button data-k="right" aria-label="Derecha">▶</button></div>
-  <div class="grp"><button data-k="back" aria-label="Freno">▼</button><button data-k="gas" aria-label="Acelerar">▲</button></div>
+  <div class="grp"><button data-k="fire" aria-label="Usar arma">ARMA</button><button data-k="back" aria-label="Freno">▼</button><button data-k="gas" aria-label="Acelerar">▲</button></div>
 </div>
 
 <script type="module" src="js/main.js"></script>

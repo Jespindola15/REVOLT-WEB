@@ -77,6 +77,14 @@ export class CarPhysics {
     this.speed = 0; this.fwdSpeed = 0;
     // para el sonido: cuánto derrapa (0..1) y qué tan fuerte fue el último golpe contra la pista
     this.skid = 0; this.impact = 0; this._skidAcc = 0; this._impactAcc = 0;
+    // efectos de armas y bonus (segundos que les quedan): turbo, aceite (sin agarre), electrocutado (sin motor)
+    this.fx = { turbo: 0, oil: 0, zap: 0 };
+  }
+
+  // Golpe de un arma: empuje (vector en unidades/s) y un giro al azar
+  blast(push, spin = 0) {
+    this.vel.add(push);
+    if (spin) this.angVel.add(new THREE.Vector3((Math.random() - 0.5) * spin, (Math.random() - 0.5) * spin, (Math.random() - 0.5) * spin));
   }
 
   place(posThree, yaw) {
@@ -115,6 +123,7 @@ export class CarPhysics {
     this._skidAcc = 0; this._impactAcc = 0;
     for (let i = 0; i < sub; i++) this.substep(h);
     this.skid = this._skidAcc; this.impact = this._impactAcc;
+    for (const k in this.fx) if (this.fx[k] > 0) this.fx[k] = Math.max(0, this.fx[k] - dt);
     this.speed = this.vel.length();
     const fwd = _v1.set(0, 0, -1).applyQuaternion(this.quat);
     this.fwdSpeed = this.vel.dot(fwd);
@@ -138,6 +147,9 @@ export class CarPhysics {
     const fwdBody = new THREE.Vector3(0, 0, -1).applyQuaternion(this.quat);
     const vFwd = this.vel.dot(fwdBody);
     const speed = this.vel.length();
+    const fx = this.fx;
+    // con turbo el auto anda más rápido y acelera más
+    const top = this.top * (fx.turbo > 0 ? 1.4 : 1), accel = this.accel * (fx.turbo > 0 ? 1.7 : 1);
 
     // Dirección: se acerca al valor pedido según SteerRate, y se reduce con la velocidad
     const speedFrac = Math.min(1.2, Math.abs(vFwd) / this.top);
@@ -152,10 +164,10 @@ export class CarPhysics {
 
     // Motor / freno
     let drive = 0, brake = 0;
-    const t = inp.throttle;
+    const t = fx.zap > 0 ? 0 : inp.throttle; // electrocutado: el motor no responde
     if (t > 0.05) {
       if (vFwd < -60) brake = t;
-      else drive = t * (1 - Math.min(1, Math.max(0, vFwd) / this.top) ** 3);
+      else drive = t * (1 - Math.min(1, Math.max(0, vFwd) / top) ** 3);
     } else if (t < -0.05) {
       if (vFwd > 60) brake = -t;
       else {
@@ -219,7 +231,7 @@ export class CarPhysics {
 
       // Longitudinal
       let Fl = 0;
-      if (w.powered && drive !== 0) Fl += drive * this.accel * m / w.nPow;
+      if (w.powered && drive !== 0) Fl += drive * accel * m / w.nPow;
       if (brake > 0) Fl -= Math.sign(vF) * Math.min(brake * 2600 * m / nW, Math.abs(vF) * m / nW / dt * 0.5);
       if (inp.handbrake && !w.turnable) Fl -= Math.sign(vF) * Math.min(1800 * m / nW, Math.abs(vF) * m / nW / dt * 0.5);
       Fl -= vF * m / nW * (0.05 + (w.axleFriction || 0.02) * 2);
@@ -228,6 +240,7 @@ export class CarPhysics {
       const slip = Math.atan2(vS, Math.abs(vF) + 40);
       let mu = (w.staticFriction || 1.5) * 1.15;
       if (inp.handbrake && !w.turnable) mu = (w.kineticFriction || 1.4) * 0.45;
+      if (fx.oil > 0) mu *= 0.22; // mancha de aceite
       const peak = 0.2;
       let Fs = -mu * Nt * Math.max(-1, Math.min(1, slip / peak));
       // estabilizador a baja velocidad: evita que el auto se deslice parado en pendientes

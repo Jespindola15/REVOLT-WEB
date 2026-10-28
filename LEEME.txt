@@ -53,13 +53,32 @@ CONTROLES
 ---------
 Flechas o WASD ........ manejar
 Espacio ............... freno de mano
+F o Enter ............. usar el arma que agarraste
 R ..................... reaparecer (si quedás trabado o dado vuelta)
 C ..................... cambiar cámara (cerca / lejos / paragolpes)
-M ..................... prender o apagar el sonido del motor
+M ..................... prender o apagar el sonido
 Esc ................... volver al menú
 Joystick .............. RT acelera, LT frena, palanca izquierda dobla,
-                        A o RB freno de mano, Y reaparece
+                        A o RB freno de mano, LB usa el arma, Y reaparece
 En celular aparecen botones en pantalla.
+
+
+ARMAS Y BONUS
+-------------
+Los bonus (los rayitos que giran) están en los mismos lugares que en el
+juego original. Pasá por encima de uno para agarrar un arma al azar; el que
+va último tiene más chances de sacar las buenas.
+  Cohete / 3 cohetes ...... persiguen al auto que tenés adelante (aparece una
+                            mira roja sobre él)
+  Onda expansiva .......... bola eléctrica que va pegada al piso y revolea
+  3 bombitas de agua ...... se tiran en arco y frenan al que mojan
+  Aceite .................. mancha atrás tuyo: el que pisa pierde agarre
+  Bola de acero ........... bola pesada que rueda y empuja
+  Turbo ................... 4 segundos más rápido
+  Pulso eléctrico ......... 6 segundos: el que se te acerca se queda sin motor
+  Bomba ................... explota a los 5 segundos: chocá a alguien para
+                            pasársela
+  Pulso global (estrella) . deja sin motor a todos los que van adelante
 
 
 QUÉ ES IGUAL Y QUÉ NO AL ORIGINAL
@@ -70,8 +89,9 @@ el cielo, las texturas de todo, los modelos de los autos y sus parámetros
 
 Distinto: la física del manejo está hecha de nuevo a partir de esos
 parámetros, porque la física original de Re-Volt no es pública. Se siente
-parecida pero no idéntica. Tampoco tiene armas, rivales de la computadora,
-música ni reflejos cromados.
+parecida pero no idéntica. Las armas funcionan como en el original pero
+con efectos simplificados. Tampoco tiene rivales de la computadora (todavía)
+ni reflejos cromados en los autos.
 
 
 PROBARLO EN TU PC SIN SUBIRLO
