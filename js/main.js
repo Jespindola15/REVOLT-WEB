@@ -95,9 +95,21 @@ async function buildTrack(T) {
     } else meshes.push({ polys: prm.polys, verts: prm.verts, solid: def.solid, xform });
   }
   const built = buildMeshes(meshes, getMat, { brightness: 1.0 });
+  // Pistas que chocan contra su malla de choques original (.ncp), como el juego: en el casino la malla
+  // de dibujo tiene paredes "pintadas" encima de huecos (la salida del último túnel quedaba tapada)
+  let worldColl = built.collision;
+  if (NCP_COLLISION.has(T.id) && !window.__noNcp) { // __noNcp: solo para pruebas
+    try {
+      const raw = parseNCP(await fetchBuf(dir + T.id + '.ncp'));
+      for (let i = 0; i < raw.length; i += 3) { raw[i + 1] = -raw[i + 1]; raw[i + 2] = -raw[i + 2]; }
+      if (raw.length > 900) worldColl = raw;
+    } catch (e) { console.warn('Sin .ncp para ' + T.id + ', se usa la malla de dibujo'); }
+  }
+  // agregados propios de esta versión (ej.: la rampa para salir de la pileta del barco)
+  for (const x of TRACK_EXTRAS[T.id] || []) { const e = buildExtra(x); built.group.add(e.mesh); extraColl.push(...e.coll); }
   const cg = new THREE.BufferGeometry();
-  const allColl = new Float32Array(built.collision.length + extraColl.length);
-  allColl.set(built.collision); allColl.set(extraColl, built.collision.length);
+  const allColl = new Float32Array(worldColl.length + extraColl.length);
+  allColl.set(worldColl); allColl.set(extraColl, worldColl.length);
   cg.setAttribute('position', new THREE.BufferAttribute(allColl, 3));
   const bvh = new TrackCollider(new MeshBVH(cg));
   // objetos del .fob: bonus de armas (tipo 30) y objetos que giran (tipo 0, "barril": la ruleta del casino)
@@ -146,6 +158,54 @@ async function buildTrack(T) {
     if (ai.loadMemory && !ai.loadMemory(mem)) { try { ai.loadMemory(JSON.parse(await fetchText(dir + 'ai_memory.json'))); } catch (e) {} }
   }
   return { id: T.id, name: T.name, inf, zones, nZones, path, ai, pickups, group: built.group, sky: skyGroup, bvh, bg, fog, far };
+}
+
+// ---------- Arreglos de pistas ----------
+const NCP_COLLISION = new Set(['casinorv']);
+// Coordenadas de three (y para arriba). Rampa: de "from" (abajo) a "to" (arriba), con su ancho.
+const TRACK_EXTRAS = {
+  // pileta del barco: 500 de profundidad y sin salida; rampa de madera contra la pared del lado de la pista
+  ship1: [{ type: 'ramp', from: [1250, -1625, -3100], to: [2852, -1125, -3100], width: 330 }],
+};
+let woodTex = null;
+function woodTexture() {
+  if (woodTex) return woodTex;
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const g = c.getContext('2d');
+  // tablas de madera clara con juntas oscuras y vetas (parecido al piso del barco)
+  for (let i = 0; i < 8; i++) {
+    const y = i * 32;
+    g.fillStyle = ['#c8955a', '#bf8a50', '#cf9c62', '#c48f55'][i % 4]; g.fillRect(0, y, 256, 32);
+    g.strokeStyle = 'rgba(90,50,20,0.25)'; g.lineWidth = 1;
+    for (let k = 0; k < 5; k++) { g.beginPath(); g.moveTo(0, y + 5 + k * 5 + (i % 3)); g.bezierCurveTo(80, y + 3 + k * 6, 170, y + 9 + k * 4, 256, y + 6 + k * 5); g.stroke(); }
+    g.fillStyle = '#5a3418'; g.fillRect(0, y + 30, 256, 2);
+    g.fillStyle = '#6b4220'; g.fillRect(((i * 97) % 200) + 20, y + 13, 5, 5); g.fillRect(((i * 53) % 200) + 30, y + 13, 5, 5);
+  }
+  woodTex = new THREE.CanvasTexture(c); woodTex.colorSpace = THREE.NoColorSpace;
+  woodTex.wrapS = woodTex.wrapT = THREE.RepeatWrapping;
+  return woodTex;
+}
+function buildExtra(x) {
+  const A = new THREE.Vector3(...x.from), B = new THREE.Vector3(...x.to);
+  const u = new THREE.Vector3(B.x - A.x, 0, B.z - A.z).normalize();
+  const sd = new THREE.Vector3(-u.z, 0, u.x).multiplyScalar(x.width / 2);
+  const a1 = A.clone().add(sd), a2 = A.clone().sub(sd), b1 = B.clone().add(sd), b2 = B.clone().sub(sd);
+  const f1 = new THREE.Vector3(b1.x, A.y, b1.z), f2 = new THREE.Vector3(b2.x, A.y, b2.z); // pie de la rampa contra la pared
+  const len = A.distanceTo(B), reps = len / 260;
+  // arriba: tablas; costados y frente: madera más oscura
+  const top = new THREE.BufferGeometry();
+  top.setAttribute('position', new THREE.Float32BufferAttribute([...a1.toArray(), ...b1.toArray(), ...b2.toArray(), ...a1.toArray(), ...b2.toArray(), ...a2.toArray()], 3));
+  top.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 0, reps, 1.2, reps, 0, 0, 1.2, reps, 1.2, 0], 2));
+  const side = new THREE.BufferGeometry();
+  side.setAttribute('position', new THREE.Float32BufferAttribute([...a1.toArray(), ...f1.toArray(), ...b1.toArray(), ...a2.toArray(), ...b2.toArray(), ...f2.toArray(), ...f1.toArray(), ...f2.toArray(), ...b2.toArray(), ...f1.toArray(), ...b2.toArray(), ...b1.toArray()], 3));
+  side.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 0, reps, 0.6, reps, 0, 0, 0.6, reps, 0, reps, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1], 2));
+  const mesh = new THREE.Group();
+  mesh.add(new THREE.Mesh(top, new THREE.MeshBasicMaterial({ map: woodTexture(), side: THREE.DoubleSide, fog: true })));
+  mesh.add(new THREE.Mesh(side, new THREE.MeshBasicMaterial({ map: woodTexture(), color: 0x8a6a4a, side: THREE.DoubleSide, fog: true })));
+  // choques: la superficie y los dos costados (para no meterse por debajo)
+  const coll = [...a1.toArray(), ...b1.toArray(), ...b2.toArray(), ...a1.toArray(), ...b2.toArray(), ...a2.toArray(),
+    ...a1.toArray(), ...f1.toArray(), ...b1.toArray(), ...a2.toArray(), ...b2.toArray(), ...f2.toArray()];
+  return { mesh, coll };
 }
 
 function loadTrackCached(id) {
@@ -390,6 +450,72 @@ async function spawnMyCar(slot = 0) {
   G.pathHint = { from: null };
   const s = gridSlot(slot);
   G.phys.place(s.pos, s.yaw);
+  // reaparecer (R, Y del joystick, auto dado vuelta o caído): siempre sobre la pista
+  G.phys.respawn = () => respawnOnTrack(G.phys);
+  G.goodSt = null; G.respSt = { from: null }; G.fallT = 0;
+}
+
+// ---------- Reaparecer dentro de la pista ----------
+// Se recuerda el último punto de la línea de carrera por donde ibas bien (apoyado y sobre la pista).
+// Si quedás afuera del mapa, arriba de algo o te caés, volvés ahí mirando para adelante.
+let goodT = 0;
+function trackGoodSpot(now) {
+  if (!track?.ai || !G.phys || now - goodT < 250) return;
+  goodT = now;
+  const P = G.phys, up = new THREE.Vector3(0, 1, 0).applyQuaternion(P.quat);
+  const st = G.respSt;
+  const loc = track.ai.locate(P.pos, st);
+  if (!loc || P.grounded < 3 || up.y < 0.7) return;
+  const n = track.ai.nodes[st.from], m = track.ai.nodes[st.to];
+  const lineY = n.p.y + (m.p.y - n.p.y) * st.t;
+  const hw = track.ai.halfWidth(st);
+  if (st.d2 < (hw + 120) ** 2 && Math.abs(P.pos.y - lineY) < 160) G.goodSt = { from: st.from, to: st.to, t: st.t, picks: { ...(st.picks || {}) } };
+}
+// punto de la pista donde reaparecer (posición apoyada en el piso y hacia dónde mirar)
+function trackSpawnAt(st, fwd = 0) {
+  const sp = track.ai.spawnPoint(st, fwd);
+  if (!sp) return null;
+  const p = sp.pos.clone();
+  // el piso justo debajo de la línea (empezando cerca, para no caer arriba del techo de un túnel)
+  for (const h of [80, 300]) {
+    const hit = world.bvh.raycastFirst(new THREE.Ray(p.clone().add(new THREE.Vector3(0, h, 0)), new THREE.Vector3(0, -1, 0)), THREE.DoubleSide, 0, h + 400);
+    if (hit && Math.abs(hit.face.normal.y) > 0.5) { p.y = hit.point.y + 30; return { pos: p, yaw: Math.atan2(-sp.dir.x, -sp.dir.z) }; }
+  }
+  p.y += 30;
+  return { pos: p, yaw: Math.atan2(-sp.dir.x, -sp.dir.z) };
+}
+function respawnOnTrack(phys) {
+  let spot = null;
+  if (track?.ai) {
+    let st = G.goodSt;
+    if (!st) { st = { from: null }; track.ai.locate(phys.pos, st); }
+    if (st.from != null) spot = trackSpawnAt({ ...st, picks: { ...(st.picks || {}) } });
+  } else if (track?.path) {
+    const loc = pathLocate(phys.pos, G.pathHint);
+    if (loc) {
+      const N = track.path.nodes, P3 = n => new THREE.Vector3(n.pos[0], -n.pos[1], -n.pos[2]);
+      const a = P3(N[loc.from]), c = P3(N[loc.to]), p = a.clone().lerp(c, loc.t), d = c.clone().sub(a);
+      const hit = world.bvh.raycastFirst(new THREE.Ray(p.clone().add(new THREE.Vector3(0, 80, 0)), new THREE.Vector3(0, -1, 0)), THREE.DoubleSide, 0, 600);
+      if (hit) p.y = hit.point.y + 30;
+      spot = { pos: p, yaw: Math.atan2(-d.x, -d.z) };
+    }
+  }
+  if (!spot) { // sin recorrido: como antes, el último lugar firme
+    const ls = phys.lastSafe; if (!ls) return;
+    const f = new THREE.Vector3(0, 0, -1).applyQuaternion(ls.q); f.y = 0;
+    spot = { pos: ls.p.clone().add(new THREE.Vector3(0, 30, 0)), yaw: Math.atan2(-f.x, -f.z) };
+  }
+  phys.place(spot.pos, spot.yaw);
+  if (phys === G.phys) { G.prevPos = null; G.fallT = 0; }
+}
+// cayendo al vacío (sin piso abajo) más de un segundo: reaparece solo
+function checkFall(dt) {
+  const P = G.phys; if (!P) return;
+  if (P.grounded > 0 || P.vel.y > -50) { G.fallT = 0; return; }
+  const hit = world.bvh.raycastFirst(new THREE.Ray(P.pos, new THREE.Vector3(0, -1, 0)), THREE.DoubleSide, 0, 4000);
+  if (hit) { G.fallT = 0; return; }
+  G.fallT = (G.fallT || 0) + dt;
+  if (G.fallT > 1.0) { G.fallT = 0; P.respawn(); }
 }
 
 function resetLaps() { G.lap = newLap(); for (const b of G.bots) b.lap = newLap(); }
@@ -650,7 +776,9 @@ async function startBotRace() {
     phys.place(s.pos, s.yaw);
     const vis = new CarVisual(carId); vis.setName(cd.params.name);
     const skill = D.skill + (Math.random() - 0.5) * 2 * D.spread;
-    return { id: 'bot' + i, carId, name: cd.params.name, phys, vis, driver: new BotDriver(phys, botNav, skill), lap: newLap(), prevPos: null, prevQuat: null, rpos: phys.pos.clone(), rquat: phys.quat.clone() };
+    const b = { id: 'bot' + i, carId, name: cd.params.name, phys, vis, driver: new BotDriver(phys, botNav, skill), lap: newLap(), prevPos: null, prevQuat: null, rpos: phys.pos.clone(), rquat: phys.quat.clone() };
+    phys.respawn = () => resetBotToPath(b);
+    return b;
   });
   // vos arrancás último, como en Re-Volt
   await spawnMyCar(G.bots.length);
@@ -665,15 +793,13 @@ function resetBotToPath(b) {
     track.ai.locate(b.phys.pos, b.driver.st);
     const sp = track.ai.spawnPoint(b.driver.st, 250); // un poco más adelante, pasando lo que lo trababa
     if (sp) {
-      const p = sp.pos.clone();
-      const hit = world.bvh.raycastFirst(new THREE.Ray(p.clone().add(new THREE.Vector3(0, 300, 0)), new THREE.Vector3(0, -1, 0)), THREE.DoubleSide, 0, 2000);
-      if (hit) p.y = hit.point.y + 30;
-      b.phys.place(p, Math.atan2(-sp.dir.x, -sp.dir.z));
+      const s2 = trackSpawnAt({ ...b.driver.st, picks: { ...(b.driver.st.picks || {}) } }, 250) || { pos: sp.pos.clone().add(new THREE.Vector3(0, 30, 0)), yaw: Math.atan2(-sp.dir.x, -sp.dir.z) };
+      b.phys.place(s2.pos, s2.yaw);
       b.prevPos = null; b.driver.lostT = 0; b.driver.stuckT = 0; b.driver.revT = 0;
       return;
     }
   }
-  const loc = pathLocate(b.phys.pos, b.driver.hint); if (!loc) { b.phys.respawn(); return; }
+  const loc = pathLocate(b.phys.pos, b.driver.hint); if (!loc) { CarPhysics.prototype.respawn.call(b.phys); return; }
   const N = track.path.nodes, P3 = n => new THREE.Vector3(n.pos[0], -n.pos[1], -n.pos[2]);
   const a = P3(N[loc.from]), c = P3(N[loc.to]);
   const p = a.clone().lerp(c, loc.t), d = c.clone().sub(a);
@@ -1682,6 +1808,8 @@ function frame(now) {
     b.vis.setWheels(b.phys.wheels.map(w => w.suspOffset), b.phys.wheels.map(w => w.steerAngle || 0), b.phys.wheels.map(w => w.spin));
   }
   if (driving) {
+    trackGoodSpot(now);
+    if (!G.locked) checkFall(dt);
     updateLaps(now);
     const L = G.lap;
     if (L.started && !L.finished && !G.locked) {

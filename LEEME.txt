@@ -134,7 +134,8 @@ F o Enter ............. usar el arma que agarraste
 H ..................... bocina (tus amigos la escuchan)
 1 a 6 ................. chat rápido: ¡Vamos!, ¡Buena!, Perdón, Jajaja, GG,
                         ¡Revancha! (en el celular, el botón 💬)
-R ..................... reaparecer (si quedás trabado o dado vuelta)
+R ..................... reaparecer sobre la pista (si quedás trabado, dado
+                        vuelta o afuera del mapa; si te caés, vuelve solo)
 C ..................... cambiar cámara (cerca / lejos / paragolpes)
 M ..................... prender o apagar el sonido
 Esc ................... pausa (en los menús: volver)
