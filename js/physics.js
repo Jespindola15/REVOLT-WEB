@@ -75,6 +75,8 @@ export class CarPhysics {
     this.grounded = 0;
     this.lastSafe = null; this.safeTimer = 0; this.flipTimer = 0;
     this.speed = 0; this.fwdSpeed = 0;
+    // para el sonido: cuánto derrapa (0..1) y qué tan fuerte fue el último golpe contra la pista
+    this.skid = 0; this.impact = 0; this._skidAcc = 0; this._impactAcc = 0;
   }
 
   place(posThree, yaw) {
@@ -110,7 +112,9 @@ export class CarPhysics {
 
   step(dt) {
     const sub = 4, h = dt / sub;
+    this._skidAcc = 0; this._impactAcc = 0;
     for (let i = 0; i < sub; i++) this.substep(h);
+    this.skid = this._skidAcc; this.impact = this._impactAcc;
     this.speed = this.vel.length();
     const fwd = _v1.set(0, 0, -1).applyQuaternion(this.quat);
     this.fwdSpeed = this.vel.dot(fwd);
@@ -211,6 +215,7 @@ export class CarPhysics {
       f.addScaledVector(n, -f.dot(n)).normalize();
       const s = new THREE.Vector3().crossVectors(f, n).normalize();
       const vF = vc.dot(f), vS = vc.dot(s);
+      this._skidAcc = Math.max(this._skidAcc, Math.min(1, Math.max(0, (Math.abs(vS) - 180) / 700)) + (inp.handbrake && !w.turnable && Math.abs(vF) > 300 ? 0.5 : 0));
 
       // Longitudinal
       let Fl = 0;
@@ -315,6 +320,7 @@ export class CarPhysics {
         const rxn = new THREE.Vector3().crossVectors(rr, n);
         const k = 1 / this.mass + n.dot(new THREE.Vector3().crossVectors(this.invIWorld(rxn, new THREE.Vector3()), rr));
         const j = -(1 + 0.15) * vn / k;
+        this._impactAcc = Math.max(this._impactAcc, -vn);
         const imp = n.clone().multiplyScalar(j);
         const vt = vRel.clone().addScaledVector(n, -vn);
         const vtl = vt.length();

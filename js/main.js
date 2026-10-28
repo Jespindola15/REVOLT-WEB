@@ -4,6 +4,7 @@ import { parsePRM, parseW, parseFIN, parseTAZ, parseINF, parseCarParams, parsePA
 import { loadTexture, makeMaterials, buildMeshes } from './build.js';
 import { CarPhysics, MPH_PER_UNIT, carSpheresFromBox } from './physics.js';
 import { Net } from './net.js';
+import { GameAudio } from './audio.js';
 
 THREE.ColorManagement.enabled = false;
 
@@ -116,6 +117,7 @@ async function setTrack(id) {
       camera.far = Math.max(32000, T.far + 4000); camera.updateProjectionMatrix();
       track = T; world = { bvh: T.bvh };
       G.pathHint = { from: null };
+      audio.setMusic(def.music ? 'tracks/' + def.id + '/' + def.music : null);
     }
     G.trackId = def.id;
     return T;
@@ -296,6 +298,7 @@ async function spawnMyCar(slot = 0) {
   G.phys = new CarPhysics(cd.params, cd.box, world);
   G.phys.steerGain = G.steerSens / 100;
   G.vis = new CarVisual(G.carId);
+  audio.setOwnEngine(engineUrl(G.carId));
   G.prevPos = null;
   G.pathHint = { from: null };
   const s = gridSlot(slot);
@@ -391,6 +394,7 @@ function updateLaps(now) {
         const lt = now - L.lapStart; L.lapStart = now; L.done++;
         if (L.best == null || lt < L.best) L.best = lt;
         toast('Vuelta ' + L.done + ': ' + fmt(lt) + (L.best === lt ? ' · ¡mejor!' : ''));
+        audio.play('pickup', { vol: 0.8 });
         if (G.mode === 'race' && L.done >= G.laps) finishRace(now);
       }
     }
@@ -404,6 +408,7 @@ function finishRace(now) {
   addResult(me);
   net?.send({ t: 'finish', name: me.name, time: me.time });
   center('¡LLEGASTE!', 2000);
+  audio.play('pickgen', { vol: 0.9 });
   setTimeout(() => { if (G.mode === 'race') { G.mode = 'results'; show('scr-results'); } }, 2200);
 }
 
@@ -429,7 +434,7 @@ function startCountdown(now) {
 }
 
 async function startPractice() {
-  audio.start();
+  audio.unlock();
   await setTrack(G.trackId);
   await spawnMyCar(0);
   G.mode = 'practice'; G.online = false; G.laps = Infinity;
@@ -437,7 +442,7 @@ async function startPractice() {
 }
 
 async function startRace(laps, grid, trackId) {
-  audio.start();
+  audio.unlock();
   if (trackId) await setTrack(trackId);
   const idx = Math.max(0, grid.indexOf(net.myId));
   await spawnMyCar(idx);
@@ -466,6 +471,7 @@ function renderCars() {
       <span>PESO</span><span class="bar"><i style="width:${stat(P.mass, 2.2)}%"></i></span></span>`;
     b.onclick = () => {
       G.carId = def.id; store.set('rv.car', def.id);
+      audio.play('menuupdown', { vol: 0.5 });
       [...el.querySelectorAll('.car')].forEach(c => c.setAttribute('aria-pressed', c === b));
       spawnMyCar(0);
       if (net?.active && !net.isHost) net.send({ t: 'car', car: def.id });
@@ -479,15 +485,23 @@ function setSteerSens(v, announce) {
   G.steerSens = Math.min(200, Math.max(50, Math.round(v / 5) * 5));
   store.set('rv.steer', String(G.steerSens));
   if (G.phys) G.phys.steerGain = G.steerSens / 100;
-  document.querySelectorAll('.steer').forEach(el => { el.value = G.steerSens; });
-  document.querySelectorAll('.steer-val').forEach(el => { el.textContent = G.steerSens + '%'; });
+  document.querySelectorAll('input.steer[id^="steer"]').forEach(el => { el.value = G.steerSens; });
+  document.querySelectorAll('input.steer[id^="steer"]').forEach(el => { const v = el.parentElement.querySelector('.steer-val'); if (v) v.textContent = G.steerSens + '%'; });
   if (announce) toast('Sensibilidad de dirección: ' + G.steerSens + '%');
 }
-document.querySelectorAll('.steer').forEach(el => el.addEventListener('input', () => setSteerSens(+el.value)));
+document.querySelectorAll('input.steer[id^="steer"]').forEach(el => el.addEventListener('input', () => setSteerSens(+el.value)));
+
+// ---------- Volumen ----------
+function syncVolumes() {
+  $('vol-music').value = Math.round(audio.musicVol * 100); $('vol-music-val').textContent = Math.round(audio.musicVol * 100) + '%';
+  $('vol-sfx').value = Math.round(audio.sfxVol * 100); $('vol-sfx-val').textContent = Math.round(audio.sfxVol * 100) + '%';
+}
+$('vol-music').addEventListener('input', e => { audio.unlock(); audio.setMusicVolume(+e.target.value / 100); syncVolumes(); });
+$('vol-sfx').addEventListener('input', e => { audio.unlock(); audio.setSfxVolume(+e.target.value / 100); syncVolumes(); audio.play('menuupdown', { vol: 0.6 }); });
 
 function getName() { const n = $('name').value.trim() || 'Piloto'; G.name = n; store.set('rv.name', n); return n; }
 
-$('btn-practice').onclick = () => { getName(); startPractice(); };
+$('btn-practice').onclick = () => { getName(); audio.unlock(); audio.play('menunext', { vol: 0.6 }); startPractice(); };
 $('btn-host').onclick = async () => {
   const name = getName(); audio.unlock();
   $('menu-status').textContent = 'Creando sala…';
@@ -566,8 +580,8 @@ async function chooseTrack(id) {
 function updateLobbyTrack() { $('lobby-track-name').textContent = 'Pista: ' + trackDef(G.trackId).name; }
 
 // ---------- Red ----------
-function clearRemotes() { for (const r of G.remotes.values()) r.vis?.dispose(); G.remotes.clear(); }
-function dropRemote(id) { const r = G.remotes.get(id); if (r) { r.vis?.dispose(); G.remotes.delete(id); } }
+function clearRemotes() { for (const r of G.remotes.values()) r.vis?.dispose(); G.remotes.clear(); audio.clearRemotes(); }
+function dropRemote(id) { const r = G.remotes.get(id); if (r) { r.vis?.dispose(); G.remotes.delete(id); } audio.removeRemote(id); }
 function ensureRemote(id, carId, name) {
   if (!carDefs.has(carId)) carId = 'rc';
   let r = G.remotes.get(id);
@@ -588,6 +602,7 @@ async function attachRemoteVis(id, r) {
   if (G.remotes.get(id) !== r || r.carId !== want) return;
   r.vis?.dispose();
   r.vis = new CarVisual(want); r.vis.setName(r.name || 'Piloto');
+  audio.removeRemote(id); // con el auto nuevo cambia el sonido del motor
   r.radius = carDefs.get(want).box.getSize(new THREE.Vector3()).z * 0.5;
 }
 const netHandlers = {
@@ -635,7 +650,7 @@ window.addEventListener('keydown', e => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (e.code === 'KeyR' && G.phys && (G.mode === 'race' || G.mode === 'practice')) G.phys.respawn();
   if (e.code === 'KeyC') G.camMode = (G.camMode + 1) % 3;
-  if (e.code === 'KeyM') audio.toggle();
+  if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Sonido apagado' : 'Sonido encendido');
   if (e.code === 'Equal' || e.code === 'NumpadAdd') setSteerSens(G.steerSens + 10, true);
   if (e.code === 'Minus' || e.code === 'NumpadSubtract') setSteerSens(G.steerSens - 10, true);
   if (e.code === 'Escape' && (G.mode === 'race' || G.mode === 'practice')) $('btn-quit').click();
@@ -678,43 +693,13 @@ function readInput() {
   return { throttle: Math.max(-1, Math.min(1, throttle)), steer: Math.max(-1, Math.min(1, steer)), handbrake: hb };
 }
 
-// ---------- Sonido de motor (sintetizado) ----------
-const audio = {
-  ctx: null, osc: null, osc2: null, gain: null, muted: store.get('rv.mute', '0') === '1',
-  unlock() { if (!this.ctx) { try { this.ctx = new AudioContext(); } catch (e) { return; } } if (this.ctx.state === 'suspended') this.ctx.resume(); },
-  start() {
-    this.unlock(); if (!this.ctx || this.osc) return;
-    const c = this.ctx;
-    this.osc = c.createOscillator(); this.osc.type = 'sawtooth';
-    this.osc2 = c.createOscillator(); this.osc2.type = 'square';
-    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
-    this.gain = c.createGain(); this.gain.gain.value = 0;
-    const g2 = c.createGain(); g2.gain.value = 0.3;
-    this.osc.connect(lp); this.osc2.connect(g2); g2.connect(lp); lp.connect(this.gain); this.gain.connect(c.destination);
-    this.osc.start(); this.osc2.start();
-  },
-  update(frac, throttle, active) {
-    if (!this.osc) return;
-    const t = this.ctx.currentTime;
-    const f = 70 + frac * 330 + Math.abs(throttle) * 25;
-    this.osc.frequency.setTargetAtTime(f, t, 0.05); this.osc2.frequency.setTargetAtTime(f * 0.5, t, 0.05);
-    this.gain.gain.setTargetAtTime(this.muted || !active ? 0 : 0.05 + Math.abs(throttle) * 0.04, t, 0.08);
-  },
-  // golpe corto entre autos: ruido filtrado que se apaga rápido
-  bump(strength) {
-    if (!this.ctx || this.muted) return;
-    const c = this.ctx, t = c.currentTime;
-    if (this.lastBump && t - this.lastBump < 0.15) return;
-    this.lastBump = t;
-    const len = Math.floor(c.sampleRate * 0.12), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
-    const src = c.createBufferSource(); src.buffer = buf;
-    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500 + strength * 900;
-    const g = c.createGain(); g.gain.value = 0.15 + strength * 0.35;
-    src.connect(lp); lp.connect(g); g.connect(c.destination); src.start();
-  },
-  toggle() { this.muted = !this.muted; store.set('rv.mute', this.muted ? '1' : '0'); toast(this.muted ? 'Sonido apagado' : 'Sonido encendido'); },
-};
+// ---------- Sonido ----------
+const audio = new GameAudio(store);
+function engineUrl(carId) { return carDef(carId)?.engine || 'sfx/moto.wav'; }
+function carTop(carId) { const P = carDefs.get(carId)?.params; return P ? (P.topEnd > 100 ? P.topEnd : P.topSpeed * 85.4) : 3000; }
+// el navegador solo deja sonar después de una interacción
+window.addEventListener('pointerdown', () => audio.unlock());
+window.addEventListener('keydown', () => audio.unlock());
 
 // ---------- Cámara ----------
 // autos grandes (como el Panga) llevan la cámara un poco más lejos
@@ -726,6 +711,7 @@ function carScale() {
   return Math.max(1, Math.min(2, ext / 55));
 }
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
+const _camFw = new THREE.Vector3(), _camUp = new THREE.Vector3();
 const camDir = new THREE.Vector3(0, 0, -1);
 let camInit = false, orbit = 0, camY = 0, camDist = 0;
 function updateCamera(dt) {
@@ -867,8 +853,12 @@ function frame(now) {
   // Cuenta regresiva
   if (driving && G.locked) {
     const left = G.goTime - now;
-    if (left <= 0) { G.locked = false; center('¡YA!', 700); G.lap.lapStart = now; }
-    else center(String(Math.ceil(left / 1000)), 0);
+    if (left <= 0) { G.locked = false; center('¡YA!', 700); G.lap.lapStart = now; audio.play('countdown', { vol: 0.9, rate: 1.5 }); G.lastBeep = 0; }
+    else {
+      const n = Math.ceil(left / 1000);
+      center(String(n), 0);
+      if (G.lastBeep !== n) { G.lastBeep = n; audio.play('countdown', { vol: 0.7 }); }
+    }
   }
   const inp = driving && !G.locked ? (window.__autoInput ? window.__autoInput() : readInput()) : { throttle: 0, steer: 0, handbrake: true };
   G.phys.input = inp;
@@ -883,7 +873,7 @@ function frame(now) {
       if (!r.vis || !r.tpos || now - r.seen > 2000) continue;
       const cd = carDefs.get(r.carId); if (!cd?.spheres) continue;
       const hit = G.phys.collideWithCar({ pos: r.pos, quat: r.quat, vel: r.vel, spheres: cd.spheres, mass: cd.params.mass || 1.2 });
-      if (hit > 300) audio.bump(Math.min(1, hit / 2000));
+      if (hit > 300) audio.hit(Math.min(1, hit / 2000));
     }
     acc -= FIXED;
   }
@@ -944,7 +934,18 @@ function frame(now) {
     $('h-best').textContent = fmt(L.best);
     updateArrow(dt);
   }
-  audio.update(Math.min(1, Math.abs(P.fwdSpeed) / P.top), inp.throttle, driving);
+  // sonido: motor propio, golpes contra la pista, rivales y oyente en la cámara
+  audio.updateOwn(Math.abs(P.fwdSpeed) / P.top, inp.throttle, P.skid || 0, driving);
+  if (driving && P.impact > 350) audio.hit(Math.min(1, P.impact / 1800));
+  if (audio.ctx) {
+    for (const [id, r] of G.remotes) {
+      if (!r.vis) continue;
+      if (!audio.remotes.has(id)) audio.addRemote(id, engineUrl(r.carId));
+      audio.updateRemote(id, r.pos, r.vel.length() / carTop(r.carId), r.vis.root.visible);
+    }
+    const fw = camera.getWorldDirection(_camFw), up = _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+    audio.updateListener(camera.position, fw, up);
+  }
   renderer.render(scene, camera);
 }
 
@@ -955,6 +956,7 @@ async function boot() {
     if (!mr.ok) { BASE = ''; mr = await fetch('manifest.json'); }
     if (!mr.ok) throw new Error('falta manifest.json (subí la carpeta assets o su contenido)');
     manifest = normalizeManifest(await mr.json());
+    audio.setBase(BASE);
     $('loadmsg').textContent = 'Autos';
     await Promise.all(manifest.cars.map(loadCarParams));
     if (!carDefs.has(G.carId)) G.carId = manifest.cars[0].id;
@@ -964,12 +966,13 @@ async function boot() {
     await ensureCar(G.carId);
     $('name').value = G.name;
     setSteerSens(G.steerSens);
+    syncVolumes();
     renderCars();
     renderTrackButtons($('tracksel'));
     await spawnMyCar(0);
     G.mode = 'menu'; show('scr-menu');
     $('loading').hidden = true;
-    window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate };
+    window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate, audio };
   } catch (e) {
     console.error(e);
     $('loadmsg').textContent = 'No se pudo cargar: ' + e.message + '. Si abriste el archivo con doble clic, tiene que estar subido a una página web (ver LEEME).';

@@ -70,6 +70,7 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
 .lapsel button[aria-pressed=true] { border-color: var(--volt); color: var(--volt); }
 .steer { width: 100%; accent-color: var(--volt); }
 .steer-val { color: var(--volt); margin-left: 6px; letter-spacing: 1px; }
+.vols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .steer-ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
 .tracksel { display: flex; gap: 6px; flex-wrap: wrap; }
 .tracksel button { flex: 1 1 120px; background: var(--ink-2); color: var(--paper); border: 2px solid var(--ink-3); border-radius: 4px; padding: 9px 8px; font-weight: 700; font-size: 14px; }
@@ -166,6 +167,16 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
       <label class="label" for="steer">Sensibilidad de dirección <span class="steer-val">100%</span></label>
       <input type="range" class="steer" id="steer" min="50" max="200" step="5" value="100">
       <div class="steer-ends"><span>Menos giro</span><span>Más giro</span></div>
+    </div>
+    <div class="vols">
+      <div class="field">
+        <label class="label" for="vol-music">Música <span class="steer-val" id="vol-music-val">50%</span></label>
+        <input type="range" class="steer" id="vol-music" min="0" max="100" step="5" value="50">
+      </div>
+      <div class="field">
+        <label class="label" for="vol-sfx">Efectos <span class="steer-val" id="vol-sfx-val">80%</span></label>
+        <input type="range" class="steer" id="vol-sfx" min="0" max="100" step="5" value="80">
+      </div>
     </div>
     <button class="btn" id="btn-practice">Práctica solo</button>
     <div class="field">

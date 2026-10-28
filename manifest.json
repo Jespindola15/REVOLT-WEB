@@ -11,7 +11,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.png"
+   "tex": "car.png",
+   "engine": "sfx/moto.wav"
   },
   {
    "id": "moss",
@@ -24,7 +25,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.png"
+   "tex": "car.png",
+   "engine": "sfx/moto.wav"
   },
   {
    "id": "adeon",
@@ -37,7 +39,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.png"
+   "tex": "car.png",
+   "engine": "sfx/petrol.wav"
   },
   {
    "id": "amw",
@@ -50,7 +53,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.png"
+   "tex": "car.png",
+   "engine": "sfx/petrol.wav"
   },
   {
    "id": "volken",
@@ -63,7 +67,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.png"
+   "tex": "car.png",
+   "engine": "sfx/moto.wav"
   },
   {
    "id": "mite",
@@ -76,7 +81,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.png"
+   "tex": "car.png",
+   "engine": "sfx/moto.wav"
   },
   {
    "id": "panga",
@@ -89,7 +95,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.jpg"
+   "tex": "car.jpg",
+   "engine": "sfx/petrol.wav"
   },
   {
    "id": "dino",
@@ -102,7 +109,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.png"
+   "tex": "car.png",
+   "engine": "sfx/moto.wav"
   },
   {
    "id": "c2mcqueen2",
@@ -115,7 +123,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.jpg"
+   "tex": "car.jpg",
+   "engine": "cars/c2mcqueen2/engine.wav"
   },
   {
    "id": "c2francescobernoulli",
@@ -128,7 +137,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.png"
+   "tex": "car.png",
+   "engine": "cars/c2francescobernoulli/engine.wav"
   },
   {
    "id": "c2maxschnell",
@@ -141,7 +151,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.png"
+   "tex": "car.png",
+   "engine": "cars/c2maxschnell/engine.wav"
   },
   {
    "id": "c2shutodoroki",
@@ -154,7 +165,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.jpg"
+   "tex": "car.jpg",
+   "engine": "cars/c2shutodoroki/engine.wav"
   },
   {
    "id": "c2carlaveloso",
@@ -167,7 +179,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.jpg"
+   "tex": "car.jpg",
+   "engine": "cars/c2carlaveloso/engine.wav"
   },
   {
    "id": "c2raoulcaroule",
@@ -180,7 +193,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.png"
+   "tex": "car.png",
+   "engine": "cars/c2raoulcaroule/engine.wav"
   },
   {
    "id": "c2jeffgorvette",
@@ -193,7 +207,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.jpg"
+   "tex": "car.jpg",
+   "engine": "cars/c2jeffgorvette/engine.wav"
   },
   {
    "id": "c2miguelcamino",
@@ -206,7 +221,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.jpg"
+   "tex": "car.jpg",
+   "engine": "cars/c2miguelcamino/engine.wav"
   },
   {
    "id": "c2nigelgearsley",
@@ -219,7 +235,8 @@
     "3": "m3.prm",
     "4": "m4.prm"
    },
-   "tex": "car.png"
+   "tex": "car.png",
+   "engine": "cars/c2nigelgearsley/engine.wav"
   }
  ],
  "tracks": [
@@ -239,76 +256,36 @@
     "9": "tex9.png"
    },
    "instances": {
-    "whitepos": {
-     "prm": "whitepost.prm",
+    "barrier": {
+     "prm": "barrier.prm",
+     "solid": true
+    },
+    "tree2": {
+     "prm": "tree2.prm",
+     "solid": true
+    },
+    "startrev": {
+     "prm": "startrev.prm",
+     "solid": false
+    },
+    "tree1": {
+     "prm": "tree1.prm",
+     "solid": false
+    },
+    "seat2": {
+     "prm": "seat2.prm",
+     "solid": false
+    },
+    "barrierp": {
+     "prm": "barrierpole.prm",
      "solid": true
     },
     "bmw": {
      "prm": "bmw.prm",
      "solid": true
     },
-    "tree1": {
-     "prm": "tree1.prm",
-     "solid": false
-    },
-    "house1": {
-     "prm": "house1.prm",
-     "solid": false
-    },
-    "steer": {
-     "prm": "steer.prm",
-     "solid": false
-    },
-    "hoop": {
-     "prm": "hoop.prm",
-     "solid": false
-    },
-    "startrev": {
-     "prm": "startrev.prm",
-     "solid": false
-    },
-    "bin": {
-     "prm": "bin.prm",
-     "solid": true
-    },
-    "ramp1": {
-     "prm": "ramp1.prm",
-     "solid": true
-    },
-    "barrier": {
-     "prm": "barrier.prm",
-     "solid": true
-    },
-    "skate": {
-     "prm": "skate.prm",
-     "solid": true
-    },
     "lampost": {
      "prm": "lampost.prm",
-     "solid": true
-    },
-    "barrierp": {
-     "prm": "barrierpole.prm",
-     "solid": true
-    },
-    "carbase": {
-     "prm": "carbase.prm",
-     "solid": true
-    },
-    "seat2": {
-     "prm": "seat2.prm",
-     "solid": false
-    },
-    "start": {
-     "prm": "start.prm",
-     "solid": false
-    },
-    "seat1": {
-     "prm": "seat1.prm",
-     "solid": false
-    },
-    "bmw2": {
-     "prm": "bmw2.prm",
      "solid": true
     },
     "house2": {
@@ -319,8 +296,48 @@
      "prm": "ramp3.prm",
      "solid": true
     },
-    "tree2": {
-     "prm": "tree2.prm",
+    "skate": {
+     "prm": "skate.prm",
+     "solid": true
+    },
+    "hoop": {
+     "prm": "hoop.prm",
+     "solid": false
+    },
+    "start": {
+     "prm": "start.prm",
+     "solid": false
+    },
+    "house1": {
+     "prm": "house1.prm",
+     "solid": false
+    },
+    "ramp1": {
+     "prm": "ramp1.prm",
+     "solid": true
+    },
+    "bin": {
+     "prm": "bin.prm",
+     "solid": true
+    },
+    "seat1": {
+     "prm": "seat1.prm",
+     "solid": false
+    },
+    "bmw2": {
+     "prm": "bmw2.prm",
+     "solid": true
+    },
+    "steer": {
+     "prm": "steer.prm",
+     "solid": false
+    },
+    "carbase": {
+     "prm": "carbase.prm",
+     "solid": true
+    },
+    "whitepos": {
+     "prm": "whitepost.prm",
      "solid": true
     }
    },
@@ -331,7 +348,8 @@
     "rt": "sky_rt.jpg",
     "tp": "sky_tp.jpg",
     "bt": "sky_bt.jpg"
-   }
+   },
+   "music": "music.ogg"
   },
   {
    "id": "toylite",
@@ -346,18 +364,6 @@
     "6": "tex6.jpg"
    },
    "instances": {
-    "teddy": {
-     "prm": "teddy.prm",
-     "solid": true
-    },
-    "drawer": {
-     "prm": "drawer.prm",
-     "solid": true
-    },
-    "carboxa": {
-     "prm": "carboxa.prm",
-     "solid": true
-    },
     "ball": {
      "prm": "ball.prm",
      "solid": false
@@ -366,116 +372,129 @@
      "prm": "carboxb.prm",
      "solid": true
     },
-    "genboxb": {
-     "prm": "genboxb.prm",
-     "solid": true
-    },
     "walker": {
      "prm": "walker.prm",
+     "solid": true
+    },
+    "carboxd": {
+     "prm": "carboxd.prm",
      "solid": true
     },
     "bspotgl": {
      "prm": "bspotgl.prm",
      "solid": false
     },
-    "carboxd": {
-     "prm": "carboxd.prm",
-     "solid": true
-    },
-    "spotgl": {
-     "prm": "spotgl.prm",
-     "solid": false
-    },
-    "bot_box": {
-     "prm": "bot_box.prm",
-     "solid": true
-    },
-    "tallbox": {
-     "prm": "tallbox.prm",
-     "solid": false
-    },
-    "hopper": {
-     "prm": "hopper.prm",
-     "solid": false
-    },
-    "rocketpa": {
-     "prm": "rocketpad.prm",
-     "solid": true
-    },
-    "dozer": {
-     "prm": "dozer.prm",
+    "gator": {
+     "prm": "gator.prm",
      "solid": true
     },
     "genboxc": {
      "prm": "genboxc.prm",
      "solid": true
     },
-    "chest": {
-     "prm": "chest.prm",
-     "solid": true
-    },
-    "robot": {
-     "prm": "robot.prm",
+    "hopper": {
+     "prm": "hopper.prm",
      "solid": false
-    },
-    "nelly": {
-     "prm": "nelly.prm",
-     "solid": true
     },
     "duplo": {
      "prm": "duplo.prm",
      "solid": true
     },
-    "crane": {
-     "prm": "crane.prm",
-     "solid": true
-    },
-    "cardbox": {
-     "prm": "cardbox.prm",
-     "solid": true
-    },
-    "carboxc": {
-     "prm": "carboxc.prm",
-     "solid": true
-    },
-    "bigrocke": {
-     "prm": "bigrocket.prm",
-     "solid": false
-    },
-    "genboxd": {
-     "prm": "genboxd.prm",
-     "solid": true
-    },
-    "hidepoly": {
-     "prm": "hidepoly.prm",
-     "solid": false
-    },
-    "shelf": {
-     "prm": "shelf.prm",
-     "solid": false
-    },
-    "truck": {
-     "prm": "truck.prm",
-     "solid": false
-    },
-    "palm": {
-     "prm": "palm.prm",
-     "solid": false
-    },
-    "genbox": {
-     "prm": "genbox.prm",
+    "genboxb": {
+     "prm": "genboxb.prm",
      "solid": true
     },
     "spire": {
      "prm": "spire.prm",
      "solid": true
     },
-    "gator": {
-     "prm": "gator.prm",
+    "teddy": {
+     "prm": "teddy.prm",
      "solid": true
+    },
+    "rocketpa": {
+     "prm": "rocketpad.prm",
+     "solid": true
+    },
+    "tallbox": {
+     "prm": "tallbox.prm",
+     "solid": false
+    },
+    "cardbox": {
+     "prm": "cardbox.prm",
+     "solid": true
+    },
+    "drawer": {
+     "prm": "drawer.prm",
+     "solid": true
+    },
+    "shelf": {
+     "prm": "shelf.prm",
+     "solid": false
+    },
+    "genbox": {
+     "prm": "genbox.prm",
+     "solid": true
+    },
+    "chest": {
+     "prm": "chest.prm",
+     "solid": true
+    },
+    "hidepoly": {
+     "prm": "hidepoly.prm",
+     "solid": false
+    },
+    "robot": {
+     "prm": "robot.prm",
+     "solid": false
+    },
+    "truck": {
+     "prm": "truck.prm",
+     "solid": false
+    },
+    "bot_box": {
+     "prm": "bot_box.prm",
+     "solid": true
+    },
+    "carboxc": {
+     "prm": "carboxc.prm",
+     "solid": true
+    },
+    "palm": {
+     "prm": "palm.prm",
+     "solid": false
+    },
+    "genboxd": {
+     "prm": "genboxd.prm",
+     "solid": true
+    },
+    "nelly": {
+     "prm": "nelly.prm",
+     "solid": true
+    },
+    "carboxa": {
+     "prm": "carboxa.prm",
+     "solid": true
+    },
+    "dozer": {
+     "prm": "dozer.prm",
+     "solid": true
+    },
+    "bigrocke": {
+     "prm": "bigrocket.prm",
+     "solid": false
+    },
+    "crane": {
+     "prm": "crane.prm",
+     "solid": true
+    },
+    "spotgl": {
+     "prm": "spotgl.prm",
+     "solid": false
     }
    },
-   "sky": {}
+   "sky": {},
+   "music": "music.ogg"
   },
   {
    "id": "casinorv",
@@ -515,7 +534,44 @@
     "rt": "sky_rt.jpg",
     "tp": "sky_tp.jpg",
     "bt": "sky_bt.jpg"
-   }
+   },
+   "music": "music.ogg"
   }
+ ],
+ "sfx": [
+  "moto",
+  "petrol",
+  "clockwrk",
+  "skid_normal",
+  "skid_rough",
+  "hit1",
+  "hit2",
+  "scrape",
+  "countdown",
+  "pickup",
+  "pickgen",
+  "honka",
+  "menunext",
+  "menuupdown",
+  "turbo",
+  "firefire",
+  "firebang",
+  "wbomb",
+  "wbombbounce",
+  "wbombfire",
+  "wbombhit",
+  "oildrop",
+  "shock",
+  "shockfire",
+  "electro",
+  "electrozap",
+  "starfire",
+  "puttbang",
+  "ball",
+  "balldrop",
+  "beachball",
+  "fuse",
+  "splash",
+  "servo"
  ]
 }
