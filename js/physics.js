@@ -30,6 +30,8 @@ export class CarPhysics {
     this.angVel = new THREE.Vector3();
     this.steer = 0;
     this.input = { throttle: 0, steer: 0, handbrake: false };
+    // Sensibilidad de dirección elegida por el jugador (1 = normal)
+    this.steerGain = 1;
     const nPow = params.wheels.filter(w => w.present && w.powered).length || 2;
     this.wheels = params.wheels.map((w, i) => {
       const o = w.offset1;
@@ -126,10 +128,14 @@ export class CarPhysics {
 
     // Dirección: se acerca al valor pedido según SteerRate, y se reduce con la velocidad
     const speedFrac = Math.min(1.2, Math.abs(vFwd) / this.top);
-    // a más velocidad, menos ángulo de dirección (como en Re-Volt, según SteerMod)
-    const steerLimit = 1 / (1 + speedFrac * (P.steerMod || 0.4) * 6);
+    // a más velocidad, menos ángulo de dirección (según SteerMod). Algunos autos de la comunidad
+    // traen valores fuera de escala (por ejemplo 4.85) que dejarían la dirección casi anulada,
+    // así que se limitan a un rango razonable.
+    const steerMod = Math.min(0.5, Math.max(0.25, P.steerMod || 0.4));
+    const steerLimit = 1 / (1 + speedFrac * steerMod * 6);
     const target = inp.steer * steerLimit;
-    this.steer += (target - this.steer) * Math.min(1, (P.steerRate || 3) * 1.3 * dt);
+    const steerRate = Math.min(3.5, Math.max(2, P.steerRate || 3)) * 1.3 * Math.sqrt(this.steerGain);
+    this.steer += (target - this.steer) * Math.min(1, steerRate * dt);
 
     // Motor / freno
     let drive = 0, brake = 0;
@@ -187,7 +193,9 @@ export class CarPhysics {
 
       // Ejes de la rueda
       // input.steer > 0 = izquierda. Ruedas con SteerRatio negativo (delanteras) giran hacia el mismo lado.
-      const sa = w.turnable ? this.steer * 0.75 * Math.abs(w.steerRatio || 0.5) * (w.steerRatio > 0 ? -1 : 1) : 0;
+      // ángulo máximo de la rueda: SteerRatio del auto (acotado) por la sensibilidad del jugador
+      const ratio = Math.min(0.6, Math.max(0.35, Math.abs(w.steerRatio || 0.5)));
+      const sa = w.turnable ? Math.max(-0.8, Math.min(0.8, this.steer * 0.75 * ratio * this.steerGain)) * (w.steerRatio > 0 ? -1 : 1) : 0;
       w.steerAngle = sa;
       const fLocal = new THREE.Vector3(-Math.sin(sa), 0, -Math.cos(sa));
       const f = fLocal.applyQuaternion(this.quat);

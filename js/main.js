@@ -249,6 +249,7 @@ const G = {
   mode: 'loading', // menu | lobby | race | practice | results
   carId: store.get('rv.car', 'rc'),
   trackId: store.get('rv.track', 'nhood1'),
+  steerSens: Math.min(200, Math.max(50, +store.get('rv.steer', '100') || 100)), // sensibilidad de dirección en %
   name: store.get('rv.name', ''),
   phys: null, vis: null,
   laps: 3, raceStart: 0, goTime: 0, locked: true,
@@ -290,6 +291,7 @@ async function spawnMyCar(slot = 0) {
   if (seq !== spawnSeq) return; // llegó otro pedido mientras cargaba
   if (G.vis) G.vis.dispose();
   G.phys = new CarPhysics(cd.params, cd.box, world);
+  G.phys.steerGain = G.steerSens / 100;
   G.vis = new CarVisual(G.carId);
   G.prevPos = null;
   const s = gridSlot(slot);
@@ -456,6 +458,17 @@ function renderCars() {
   }
 }
 
+// ---------- Sensibilidad de dirección ----------
+function setSteerSens(v, announce) {
+  G.steerSens = Math.min(200, Math.max(50, Math.round(v / 5) * 5));
+  store.set('rv.steer', String(G.steerSens));
+  if (G.phys) G.phys.steerGain = G.steerSens / 100;
+  document.querySelectorAll('.steer').forEach(el => { el.value = G.steerSens; });
+  document.querySelectorAll('.steer-val').forEach(el => { el.textContent = G.steerSens + '%'; });
+  if (announce) toast('Sensibilidad de dirección: ' + G.steerSens + '%');
+}
+document.querySelectorAll('.steer').forEach(el => el.addEventListener('input', () => setSteerSens(+el.value)));
+
 function getName() { const n = $('name').value.trim() || 'Piloto'; G.name = n; store.set('rv.name', n); return n; }
 
 $('btn-practice').onclick = () => { getName(); startPractice(); };
@@ -601,6 +614,8 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyR' && G.phys && (G.mode === 'race' || G.mode === 'practice')) G.phys.respawn();
   if (e.code === 'KeyC') G.camMode = (G.camMode + 1) % 3;
   if (e.code === 'KeyM') audio.toggle();
+  if (e.code === 'Equal' || e.code === 'NumpadAdd') setSteerSens(G.steerSens + 10, true);
+  if (e.code === 'Minus' || e.code === 'NumpadSubtract') setSteerSens(G.steerSens - 10, true);
   if (e.code === 'Escape' && (G.mode === 'race' || G.mode === 'practice')) $('btn-quit').click();
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
@@ -893,6 +908,7 @@ async function boot() {
     await setTrack(G.trackId);
     await ensureCar(G.carId);
     $('name').value = G.name;
+    setSteerSens(G.steerSens);
     renderCars();
     renderTrackButtons($('tracksel'));
     await spawnMyCar(0);

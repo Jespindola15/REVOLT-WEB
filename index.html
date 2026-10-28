@@ -68,6 +68,9 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
 .lapsel { display: flex; gap: 6px; }
 .lapsel button { flex: 1; background: var(--ink-2); color: var(--paper); border: 2px solid var(--ink-3); border-radius: 4px; padding: 8px; font-weight: 700; font-size: 15px; }
 .lapsel button[aria-pressed=true] { border-color: var(--volt); color: var(--volt); }
+.steer { width: 100%; accent-color: var(--volt); }
+.steer-val { color: var(--volt); margin-left: 6px; letter-spacing: 1px; }
+.steer-ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
 .tracksel { display: flex; gap: 6px; flex-wrap: wrap; }
 .tracksel button { flex: 1 1 120px; background: var(--ink-2); color: var(--paper); border: 2px solid var(--ink-3); border-radius: 4px; padding: 9px 8px; font-weight: 700; font-size: 14px; }
 .tracksel button[aria-pressed=true] { border-color: var(--volt); color: var(--volt); background: var(--ink-3); }
@@ -159,6 +162,11 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
       <span class="label">Elegí tu auto</span>
       <div class="cars" id="cars"></div>
     </div>
+    <div class="field">
+      <label class="label" for="steer">Sensibilidad de dirección <span class="steer-val">100%</span></label>
+      <input type="range" class="steer" id="steer" min="50" max="200" step="5" value="100">
+      <div class="steer-ends"><span>Menos giro</span><span>Más giro</span></div>
+    </div>
     <button class="btn" id="btn-practice">Práctica solo</button>
     <div class="field">
       <span class="label">Online con amigos</span>
@@ -191,6 +199,11 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
       <div class="lapsel" id="lapsel">
         <button type="button" data-l="1">1</button><button type="button" data-l="3" aria-pressed="true">3</button><button type="button" data-l="5">5</button>
       </div>
+    </div>
+    <div class="field">
+      <label class="label" for="steer2">Sensibilidad de dirección <span class="steer-val">100%</span></label>
+      <input type="range" class="steer" id="steer2" min="50" max="200" step="5" value="100">
+      <div class="steer-ends"><span>Menos giro</span><span>Más giro</span></div>
     </div>
     <button class="btn" id="btn-start">Empezar carrera</button>
     <p class="hint" id="lobby-wait" hidden>Esperando que el anfitrión arranque la carrera…</p>
@@ -228,7 +241,7 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
   <div class="speedo"><b id="h-speed">0</b><span>KM/H</span></div>
   <div class="keys">
     <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> o <kbd>WASD</kbd> manejar · <kbd>Espacio</kbd> freno de mano<br>
-    <kbd>R</kbd> reaparecer · <kbd>C</kbd> cámara · <kbd>M</kbd> sonido · también joystick
+    <kbd>R</kbd> reaparecer · <kbd>C</kbd> cámara · <kbd>M</kbd> sonido · <kbd>+</kbd><kbd>−</kbd> sensibilidad · también joystick
   </div>
 </div>
 
