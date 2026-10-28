@@ -200,6 +200,7 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
 }
 @media (prefers-reduced-motion: reduce) { .btn:active { transform: none; } }
 </style>
+<link rel="stylesheet" href="css/ui.css">
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
@@ -212,24 +213,79 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
 <canvas id="view"></canvas>
 
 <div id="loading">
-  <div>CARGANDO EL BARRIO…<p id="loadmsg">Pista y autos</p></div>
+  <div class="ld"><div class="logo">RE-VOLT<small>TOYS IN THE HOOD · WEB</small></div><div class="ld-bar"><i></i></div><p id="loadmsg">Pista y autos</p></div>
 </div>
 
-<!-- MENÚ PRINCIPAL -->
+<!-- MENÚ PRINCIPAL: una pantalla por sección (las maneja js/ui.js) -->
 <section class="screen" id="scr-menu" hidden>
-  <div class="panel">
-    <h1 class="logo">RE-VOLT<small>TOYS IN THE HOOD · WEB</small></h1>
-    <div class="field">
-      <label class="label" for="name">Tu nombre</label>
-      <input type="text" id="name" maxlength="16" autocomplete="off" placeholder="Piloto">
+  <div class="band">
+    <!-- INICIO -->
+    <div class="page" id="pg-home" data-page="home">
+      <h1 class="logo">RE-VOLT<small>TOYS IN THE HOOD · WEB</small></h1>
+      <nav class="mm" aria-label="Menú principal">
+        <button type="button" class="mm-item" data-go="race" data-default><b>Carrera</b><small>Contra la computadora</small></button>
+        <button type="button" class="mm-item" data-go="multi"><b>Multijugador</b><small>Online con amigos</small></button>
+        <button type="button" class="mm-item" data-go="practice"><b>Práctica</b><small>Solo vos y tu fantasma</small></button>
+        <button type="button" class="mm-item" data-go="garage"><b>Garage</b><small id="mm-garage-sub">Elegí tu auto</small></button>
+        <button type="button" class="mm-item" data-go="options"><b>Opciones</b><small>Sonido, controles y pantalla</small></button>
+      </nav>
+      <label class="plate"><span>Piloto</span><input type="text" id="name" maxlength="16" autocomplete="off" placeholder="Piloto" spellcheck="false"></label>
     </div>
-    <div class="field">
-      <span class="label">Pista</span>
-      <div class="tracksel" id="tracksel"></div>
-      <p class="hint" id="track-rec"></p>
+
+    <!-- CARRERA CONTRA LA PC -->
+    <div class="page" id="pg-race" data-page="race" hidden>
+      <header class="pg-head"><button type="button" class="back" data-back aria-label="Volver">◀</button><h2>Carrera</h2><span>Contra la computadora</span></header>
+      <div class="pg-body">
+        <div class="field"><span class="label">Pista</span><div class="slot-track"></div></div>
+        <div class="field">
+          <span class="label">Reglas</span>
+          <div class="botopts">
+            <span>Rivales</span><div class="lapsel" id="botsel" data-autoselect><button type="button" data-v="1">1</button><button type="button" data-v="3">3</button><button type="button" data-v="5">5</button><button type="button" data-v="7">7</button></div>
+            <span>Vueltas</span><div class="lapsel" id="botlaps" data-autoselect><button type="button" data-v="1">1</button><button type="button" data-v="3">3</button><button type="button" data-v="5">5</button></div>
+            <span>Nivel</span><div class="lapsel" id="botdiff" data-autoselect><button type="button" data-v="facil">Fácil</button><button type="button" data-v="normal">Normal</button><button type="button" data-v="dificil">Difícil</button></div>
+          </div>
+        </div>
+        <div class="car-sum"><span>Tu auto</span><b class="sum-car"></b><button type="button" class="chip" data-go="garage">Cambiar</button></div>
+      </div>
+      <footer class="pg-foot"><button class="btn big" id="btn-bots" data-default>¡A correr!</button></footer>
     </div>
-    <div class="field">
-      <span class="label">Elegí tu auto</span>
+
+    <!-- PRÁCTICA -->
+    <div class="page" id="pg-practice" data-page="practice" hidden>
+      <header class="pg-head"><button type="button" class="back" data-back aria-label="Volver">◀</button><h2>Práctica</h2><span>Sin rivales ni límite de vueltas</span></header>
+      <div class="pg-body">
+        <div class="field"><span class="label">Pista</span><div class="slot-track"></div></div>
+        <p class="hint">Tu mejor vuelta queda guardada como récord de la pista y la próxima vez corrés contra su fantasma.</p>
+        <div class="car-sum"><span>Tu auto</span><b class="sum-car"></b><button type="button" class="chip" data-go="garage">Cambiar</button></div>
+      </div>
+      <footer class="pg-foot"><button class="btn big" id="btn-practice" data-default>Empezar práctica</button></footer>
+    </div>
+
+    <!-- MULTIJUGADOR -->
+    <div class="page" id="pg-multi" data-page="multi" hidden>
+      <header class="pg-head"><button type="button" class="back" data-back aria-label="Volver">◀</button><h2>Multijugador</h2><span>Online con amigos</span></header>
+      <div class="pg-body">
+        <div class="mp-card">
+          <span class="label">Crear sala</span>
+          <p class="hint">Te damos un código de 5 letras para pasarles a tus amigos. Vos elegís pista, vueltas y modo.</p>
+          <button class="btn" id="btn-host" data-default>Crear sala</button>
+        </div>
+        <div class="mp-or"><span>o</span></div>
+        <div class="mp-card">
+          <label class="label" for="code">Unirme con un código</label>
+          <div class="join">
+            <input type="text" id="code" maxlength="5" placeholder="CÓDIGO" autocomplete="off" spellcheck="false" aria-label="Código de sala">
+            <button class="btn ghost" id="btn-join">Unirme</button>
+          </div>
+        </div>
+        <div class="car-sum"><span>Tu auto</span><b class="sum-car"></b><button type="button" class="chip" data-go="garage">Cambiar</button></div>
+      </div>
+    </div>
+
+    <!-- GARAGE -->
+    <div class="page page-garage" id="pg-garage" data-page="garage" hidden>
+      <header class="pg-head"><button type="button" class="back" data-back aria-label="Volver">◀</button><h2>Garage</h2><span id="garage-count"></span></header>
+      <div class="pg-body">
       <div class="garage" id="garage">
         <div class="g-tabs" id="g-tabs" role="tablist" aria-label="Grupos de autos"></div>
         <div class="g-main">
@@ -244,43 +300,83 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
         <dl class="g-stats" id="g-stats"></dl>
         <div class="g-strip" id="g-strip" role="listbox" aria-label="Autos del grupo"></div>
       </div>
-    </div>
-    <div class="field">
-      <label class="label" for="steer">Sensibilidad de dirección <span class="steer-val">100%</span></label>
-      <input type="range" class="steer" id="steer" min="50" max="200" step="5" value="100">
-      <div class="steer-ends"><span>Menos giro</span><span>Más giro</span></div>
-    </div>
-    <div class="vols">
-      <div class="field">
-        <label class="label" for="vol-music">Música <span class="steer-val" id="vol-music-val">50%</span></label>
-        <input type="range" class="steer" id="vol-music" min="0" max="100" step="5" value="50">
       </div>
-      <div class="field">
-        <label class="label" for="vol-sfx">Efectos <span class="steer-val" id="vol-sfx-val">80%</span></label>
-        <input type="range" class="steer" id="vol-sfx" min="0" max="100" step="5" value="80">
+      <footer class="pg-foot"><button type="button" class="btn big" data-back data-default>Listo</button></footer>
+    </div>
+
+    <!-- OPCIONES -->
+    <div class="page" id="pg-options" data-page="options" hidden>
+      <header class="pg-head"><button type="button" class="back" data-back aria-label="Volver">◀</button><h2>Opciones</h2><span>Se guardan en este navegador</span></header>
+      <div class="pg-body opt-slot">
+        <div id="opt-body" class="opt-body">
+          <section class="opt-sec">
+            <h3>Audio</h3>
+            <div class="field">
+              <label class="label" for="vol-music">Música <span class="steer-val" id="vol-music-val">50%</span></label>
+              <input type="range" class="steer" id="vol-music" min="0" max="100" step="5" value="50">
+            </div>
+            <div class="field">
+              <label class="label" for="vol-sfx">Efectos <span class="steer-val" id="vol-sfx-val">80%</span></label>
+              <input type="range" class="steer" id="vol-sfx" min="0" max="100" step="5" value="80">
+            </div>
+            <div class="opt-row"><span class="label">Sonido</span><div class="lapsel" id="opt-mute" data-autoselect><button type="button" data-v="0">Encendido</button><button type="button" data-v="1">Apagado</button></div></div>
+          </section>
+          <section class="opt-sec">
+            <h3>Controles</h3>
+            <div class="field">
+              <label class="label" for="steer">Sensibilidad de dirección <span class="steer-val">100%</span></label>
+              <input type="range" class="steer" id="steer" min="50" max="200" step="5" value="100">
+              <div class="steer-ends"><span>Menos giro</span><span>Más giro</span></div>
+            </div>
+            <details class="ctl" id="ctl-kb">
+              <summary>Teclado</summary>
+              <dl class="keymap">
+                <dt><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> o <kbd>WASD</kbd></dt><dd>Manejar</dd>
+                <dt><kbd>Espacio</kbd></dt><dd>Freno de mano</dd>
+                <dt><kbd>F</kbd> <kbd>E</kbd> <kbd>Enter</kbd></dt><dd>Usar arma</dd>
+                <dt><kbd>R</kbd></dt><dd>Reaparecer en la pista</dd>
+                <dt><kbd>H</kbd></dt><dd>Bocina</dd>
+                <dt><kbd>C</kbd></dt><dd>Cambiar cámara</dd>
+                <dt><kbd>1</kbd>–<kbd>6</kbd></dt><dd>Frases (online)</dd>
+                <dt><kbd>M</kbd></dt><dd>Silenciar</dd>
+                <dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Sensibilidad</dd>
+                <dt><kbd>Esc</kbd></dt><dd>Pausa / volver</dd>
+              </dl>
+            </details>
+            <details class="ctl" id="ctl-pad">
+              <summary>Joystick <small id="pad-status">sin conectar</small></summary>
+              <dl class="keymap">
+                <dt>Stick izq. / cruceta</dt><dd>Doblar</dd>
+                <dt>RT / A</dt><dd>Acelerar</dd>
+                <dt>LT / X</dt><dd>Frenar / reversa</dd>
+                <dt>B / RB</dt><dd>Freno de mano</dd>
+                <dt>LB</dt><dd>Usar arma</dd>
+                <dt>Y</dt><dd>Reaparecer</dd>
+                <dt>Start</dt><dd>Pausa</dd>
+                <dt>En los menús</dt><dd>Cruceta, A aceptar, B volver</dd>
+              </dl>
+            </details>
+          </section>
+          <section class="opt-sec">
+            <h3>Pantalla</h3>
+            <div class="opt-row"><span class="label">Calidad</span><div class="lapsel" id="opt-quality" data-autoselect><button type="button" data-v="baja">Baja</button><button type="button" data-v="media">Media</button><button type="button" data-v="alta">Alta</button></div></div>
+            <p class="hint">Baja dibuja a menos resolución: va más fluido en compus y celulares lentos.</p>
+          </section>
+        </div>
       </div>
     </div>
-    <div class="field">
-      <span class="label">Contra la computadora</span>
-      <div class="botopts">
-        <span>Rivales</span><div class="lapsel" id="botsel"><button type="button" data-v="1">1</button><button type="button" data-v="3">3</button><button type="button" data-v="5">5</button><button type="button" data-v="7">7</button></div>
-        <span>Vueltas</span><div class="lapsel" id="botlaps"><button type="button" data-v="1">1</button><button type="button" data-v="3">3</button><button type="button" data-v="5">5</button></div>
-        <span>Nivel</span><div class="lapsel" id="botdiff"><button type="button" data-v="facil">Fácil</button><button type="button" data-v="normal">Normal</button><button type="button" data-v="dificil">Difícil</button></div>
-      </div>
-      <button class="btn" id="btn-bots">Carrera contra la PC</button>
-    </div>
-    <button class="btn ghost" id="btn-practice">Práctica libre</button>
-    <div class="field">
-      <span class="label">Online con amigos</span>
-      <button class="btn ghost" id="btn-host">Crear sala</button>
-      <div class="join">
-        <input type="text" id="code" maxlength="5" placeholder="CÓDIGO" autocomplete="off" aria-label="Código de sala">
-        <button class="btn ghost" id="btn-join">Unirme</button>
-      </div>
-    </div>
-    <p class="status" id="menu-status"></p>
+
+    <p class="status" id="menu-status" role="status"></p>
   </div>
+  <div class="navhint" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> elegir</span><span><kbd>Enter</kbd> aceptar</span><span><kbd>Esc</kbd> volver</span><span class="pad">Joystick: <kbd>A</kbd> aceptar <kbd>B</kbd> volver</span></div>
+  <div class="sel-chip" id="sel-chip" aria-live="polite"></div>
 </section>
+
+<!-- Selector de pista compartido (se mueve entre Carrera y Práctica) -->
+<div id="track-pick" class="track-pick" hidden>
+  <div class="tracksel" id="tracksel"></div>
+  <p class="hint" id="track-rec"></p>
+</div>
 
 <!-- SALA -->
 <section class="screen" id="scr-lobby" hidden>
@@ -307,7 +403,7 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
     </div>
     <div class="field" id="cup-field">
       <span class="label">Modo</span>
-      <div class="lapsel" id="cupsel">
+      <div class="lapsel" id="cupsel" data-autoselect>
         <button type="button" data-v="0" aria-pressed="true">Una carrera</button><button type="button" data-v="3">Copa de 3</button><button type="button" data-v="4">Copa de 4</button><button type="button" data-v="99">Todas</button>
       </div>
       <p class="hint">En la copa se corren varias pistas seguidas y se suman puntos: 10, 8, 6, 5, 4, 3, 2 y 1.</p>
@@ -315,7 +411,7 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
     <p class="hint" id="lobby-cup-name" hidden></p>
     <div class="field" id="lap-field">
       <span class="label">Vueltas</span>
-      <div class="lapsel" id="lapsel">
+      <div class="lapsel" id="lapsel" data-autoselect>
         <button type="button" data-l="1">1</button><button type="button" data-l="3" aria-pressed="true">3</button><button type="button" data-l="5">5</button>
       </div>
     </div>
@@ -353,6 +449,26 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
 
 <div id="busy" hidden>Cargando…</div>
 
+<!-- PAUSA (práctica y contra la PC: se frena todo) / MENÚ (online: la carrera sigue) -->
+<div id="pause" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="pause-title">
+  <div class="band">
+    <div class="page" id="pz-main">
+      <h2 class="logo" id="pause-title">PAUSA</h2>
+      <p class="pz-sub" id="pause-sub"></p>
+      <nav class="mm" aria-label="Pausa">
+        <button type="button" class="mm-item" id="pz-resume" data-default><b>Continuar</b></button>
+        <button type="button" class="mm-item" id="pz-restart"><b>Reiniciar carrera</b></button>
+        <button type="button" class="mm-item" id="pz-options"><b>Opciones</b></button>
+        <button type="button" class="mm-item" id="pz-quit"><b>Salir al menú</b></button>
+      </nav>
+    </div>
+    <div class="page" id="pz-opts" hidden>
+      <header class="pg-head"><button type="button" class="back" data-back aria-label="Volver">◀</button><h2>Opciones</h2><span id="pz-opts-sub"></span></header>
+      <div class="pg-body opt-slot"></div>
+    </div>
+  </div>
+</div>
+
 <div id="hud" hidden>
   <div class="hud-tl">
     <div class="hud-big" id="h-lap">VUELTA 1/3</div>
@@ -365,7 +481,7 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
     <div class="hud-big" id="h-pos"></div>
     <ol class="standings" id="h-standings" hidden></ol>
   </div>
-  <button class="menu-btn" id="btn-quit">Menú</button>
+  <button class="menu-btn" id="btn-quit" aria-label="Pausa">❚❚</button>
   <div class="curve" id="h-arrow" hidden aria-live="polite"></div>
   <div class="wrongway" id="h-wrong" hidden>¡CONTRAMANO!</div>
   <div class="center-msg" id="h-center" hidden></div>

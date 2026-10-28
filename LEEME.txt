@@ -30,10 +30,29 @@ Autos (43):
     Ferrari, Mercedes, Alpine, McLaren, Alfa Romeo, Aston Martin, Haas,
     AlphaTauri y Williams), uno por número
 
-En el menú, el garage muestra cada auto con su foto y sus datos reales
+En el menú, GARAGE muestra cada auto con su foto y sus datos reales
 (velocidad máxima, aceleración, agarre, dirección, peso, motor y tracción).
-Cambiá de auto con las flechas ‹ › (o las flechas del teclado) y de grupo con
-las pestañas. En la sala online también podés cambiar de auto.
+Cambiá de auto con las flechas ‹ › (o ← → del teclado, o la cruceta del
+joystick) y de grupo con las pestañas (o LB / RB). En la sala online también
+podés cambiar de auto.
+
+
+EL MENÚ
+-------
+El menú principal tiene CARRERA (contra la PC), MULTIJUGADOR, PRÁCTICA,
+GARAGE y OPCIONES. Se maneja con el mouse, con el teclado (↑ ↓ para elegir,
+← → para cambiar una opción, Enter para aceptar, Esc para volver) o con el
+joystick (cruceta o palanca, A acepta, B vuelve). Tu nombre se escribe en la
+patente de abajo.
+En OPCIONES están el volumen, la sensibilidad de la dirección, la lista de
+controles y la calidad de imagen (Baja va más fluido en compus lentas).
+
+PAUSA: con Esc (o Start del joystick, o el botón ❚❚ arriba en el celular).
+- En práctica y contra la PC se frena todo: rivales, tiempo y vueltas.
+  Podés seguir, reiniciar la carrera (misma pista y mismos rivales), cambiar
+  opciones o salir al menú. Si cambiás de pestaña se pausa solo.
+- Online la carrera NO se frena (los demás siguen corriendo): se abre un menú
+  encima y tu auto queda frenado mientras está abierto.
 
 En la sala online, el que la crea elige la pista y a los demás se les cambia
 sola. Las pistas y los autos se bajan recién cuando se eligen.
@@ -57,12 +76,11 @@ clic, el navegador no lo deja cargar los archivos.
 
 CARRERA CONTRA LA COMPUTADORA
 -----------------------------
-En el menú, "Contra la computadora": elegí cuántos rivales (1, 3, 5 o 7),
-las vueltas y el nivel (Fácil, Normal o Difícil) y tocá "Carrera contra la
-PC". Arrancás último, como en Re-Volt. Los rivales siguen la línea de
+En el menú, CARRERA: elegí la pista, cuántos rivales (1, 3, 5 o 7), las
+vueltas y el nivel (Fácil, Normal o Difícil) y tocá "¡A correr!". Arrancás último, como en Re-Volt. Los rivales siguen la línea de
 carrera original del juego (los nodos de IA de cada pista), frenan antes
 de las curvas, eligen caminos en las bifurcaciones y también agarran y usan
-armas. "Práctica libre" es para dar vueltas solo, sin rivales.
+armas. PRÁCTICA es para dar vueltas solo, sin rivales.
 
 
 MINIMAPA, RÉCORDS Y FANTASMA
@@ -71,7 +89,7 @@ MINIMAPA, RÉCORDS Y FANTASMA
   tus amigos los puntos rojos y los rivales de la PC los blancos.
 - Cada pista guarda su récord de vuelta (en tu navegador) con el auto y el
   nombre. Aparece en el menú, abajo de las pistas, y en la carrera.
-- En "Práctica libre" corre el FANTASMA de tu vuelta récord: un auto
+- En PRÁCTICA corre el FANTASMA de tu vuelta récord: un auto
   transparente que repite esa vuelta, para que veas dónde ganás o perdés.
 
 
@@ -95,7 +113,7 @@ la siguiente pista. Al final aparece el campeón.
 
 CÓMO JUGAR ONLINE
 -----------------
-- Uno toca "Crear sala" y le aparece un código de 5 letras.
+- En MULTIJUGADOR, uno toca "Crear sala" y le aparece un código de 5 letras.
 - Los demás escriben ese código y tocan "Unirme".
 - Cada uno elige su auto; el que creó la sala elige la pista y las vueltas
   (1, 3 o 5) y toca "Empezar carrera".
@@ -119,9 +137,10 @@ H ..................... bocina (tus amigos la escuchan)
 R ..................... reaparecer (si quedás trabado o dado vuelta)
 C ..................... cambiar cámara (cerca / lejos / paragolpes)
 M ..................... prender o apagar el sonido
-Esc ................... volver al menú
-Joystick .............. RT acelera, LT frena, palanca izquierda dobla,
-                        A o RB freno de mano, LB usa el arma, Y reaparece
+Esc ................... pausa (en los menús: volver)
+Joystick .............. RT o A acelera, LT o X frena, palanca izquierda
+                        dobla, B o RB freno de mano, LB usa el arma,
+                        Y reaparece, Start pausa
 En celular aparecen botones en pantalla.
 
 

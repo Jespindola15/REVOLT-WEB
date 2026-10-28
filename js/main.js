@@ -11,6 +11,7 @@ import { Minimap } from './minimap.js';
 import { CarEffects } from './effects.js';
 import { Records, LapRecorder, ghostAt } from './ghost.js';
 import { Weapons, WEAPONS } from './weapons.js';
+import { initUI } from './ui.js';
 
 THREE.ColorManagement.enabled = false;
 
@@ -353,7 +354,9 @@ function show(id) {
   $('hud').hidden = !(G.mode === 'race' || G.mode === 'practice');
   $('touch').hidden = !(isTouch && (G.mode === 'race' || G.mode === 'practice'));
   if ($('touch').hidden) $('touch-chat').hidden = true;
+  ui?.onShow(id); // la interfaz nueva (js/ui.js) cierra la pausa y acomoda el foco
 }
+let ui = null;
 const isTouch = matchMedia('(pointer: coarse)').matches;
 
 function gridSlot(i) {
@@ -1052,9 +1055,12 @@ $('btn-start').onclick = () => {
 };
 $('btn-leave').onclick = () => { resetReady(); $('lobby-chat').innerHTML = ''; net?.close(); net = null; clearRemotes(); G.online = false; toMenu(); };
 $('btn-res-back').onclick = () => { if (G.online && net?.active) { G.mode = 'lobby'; refreshLobbyUI(); spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu(); };
-$('btn-quit').onclick = () => {
+// salir de la carrera (desde la pausa): online vuelve a la sala, si no al menú (igual que antes)
+function leaveRace() {
+  setPaused(false);
   if (G.online && net?.active) { G.mode = 'lobby'; weapons.clearAll(); clearGhost(); refreshLobbyUI(); spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu();
-};
+}
+$('btn-quit').onclick = () => ui?.openPause();
 
 // lugar en la grilla según el orden de la sala (así en la sala nadie aparece encima de otro)
 function lobbySlot() { return net?.active ? Math.max(0, [...net.players.keys()].indexOf(net.myId)) : 0; }
@@ -1293,13 +1299,11 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyR' && G.phys && (G.mode === 'race' || G.mode === 'practice')) G.phys.respawn();
   if (e.code === 'KeyC') G.camMode = (G.camMode + 1) % 3;
   if (['KeyF', 'KeyE', 'Enter', 'NumpadEnter'].includes(e.code) && !e.repeat && (G.mode === 'race' || G.mode === 'practice')) { e.preventDefault(); weapons.fire(); }
-  if (G.mode === 'menu' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight') && !e.repeat) stepCar(e.code === 'ArrowLeft' ? -1 : 1);
   if (/^Digit[1-6]$/.test(e.code) && !e.repeat && G.mode !== 'menu' && G.mode !== 'loading') sayPhrase(+e.code.slice(5) - 1);
   if (e.code === 'KeyH' && (G.mode === 'race' || G.mode === 'practice' || G.mode === 'lobby')) honk();
   if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Sonido apagado' : 'Sonido encendido');
   if (e.code === 'Equal' || e.code === 'NumpadAdd') setSteerSens(G.steerSens + 10, true);
   if (e.code === 'Minus' || e.code === 'NumpadSubtract') setSteerSens(G.steerSens - 10, true);
-  if (e.code === 'Escape' && (G.mode === 'race' || G.mode === 'practice')) $('btn-quit').click();
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
@@ -1561,6 +1565,48 @@ function updateStandings(now) {
   }).join('');
 }
 
+// ---------- Pausa ----------
+// Práctica y contra la PC: se congela todo y al seguir se corren los relojes lo que duró la pausa.
+// Online no se frena nada (los demás siguen corriendo): solo se deja de leer tu entrada mientras está el menú.
+function setPaused(on) {
+  if (!!G.menuOpen === !!on) return;
+  G.menuOpen = !!on;
+  clearInput();
+  if (on) {
+    if (G.online && net?.active) return;
+    G.paused = true; G.pausedAt = performance.now();
+    // motores en silencio mientras está en pausa
+    const t = audio.ctx?.currentTime || 0;
+    audio.own?.gain.gain.setTargetAtTime(0, t, 0.05); audio.skid?.gain.gain.setTargetAtTime(0, t, 0.05);
+    for (const r of audio.remotes.values()) r.gain?.gain.setTargetAtTime(0, t, 0.05);
+  } else if (G.paused) {
+    const d = performance.now() - G.pausedAt;
+    G.goTime += d; G.lap.lapStart += d; lapRec.start += d;
+    for (const b of G.bots) b.lap.lapStart += d;
+    G.paused = false;
+  }
+}
+function clearInput() {
+  keys.clear();
+  for (const k in touchState) touchState[k] = false;
+  document.querySelectorAll('#touch button.on').forEach(b => b.classList.remove('on'));
+}
+// reiniciar desde la pausa: misma pista y mismos rivales
+async function restartRace() {
+  setPaused(false);
+  if (G.mode === 'practice') return startPractice();
+  if (G.mode !== 'race' || G.online) return;
+  const prev = G.botForce;
+  G.botForce = G.bots.map(b => b.carId);
+  try { await startBotRace(); } finally { G.botForce = prev; }
+}
+// calidad de imagen: solo cambia la resolución a la que se dibuja
+function setQuality(q) {
+  const f = { baja: 0.5, media: 0.75, alta: 1 }[q] || 1;
+  renderer.setPixelRatio(Math.max(0.5, Math.min(window.devicePixelRatio, 2) * f));
+  resize();
+}
+
 // ---------- Bucle ----------
 let last = performance.now(), acc = 0, netT = 0;
 const FIXED = 1 / 60;
@@ -1568,6 +1614,8 @@ function frame(now) {
   requestAnimationFrame(frame); if (window.__stop) return;
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (!G.phys) return;
+  // pausa (práctica y contra la PC): no avanza nada, solo se dibuja la escena quieta
+  if (G.paused) { renderer.render(scene, camera); return; }
   const driving = G.mode === 'race' || G.mode === 'practice';
 
   // Cuenta regresiva
@@ -1580,7 +1628,7 @@ function frame(now) {
       if (G.lastBeep !== n) { G.lastBeep = n; audio.play('countdown', { vol: 0.7 }); }
     }
   }
-  const inp = driving && !G.locked ? (window.__autoInput ? window.__autoInput() : readInput()) : { throttle: 0, steer: 0, handbrake: true };
+  const inp = driving && !G.locked && !G.menuOpen ? (window.__autoInput ? window.__autoInput() : readInput()) : { throttle: 0, steer: 0, handbrake: true };
   G.phys.input = inp;
 
   if (G.bots.length) updateBots(now, dt);
@@ -1757,5 +1805,15 @@ async function boot() {
     $('loadmsg').textContent = 'No se pudo cargar: ' + e.message + '. Si abriste el archivo con doble clic, tiene que estar subido a una página web (ver LEEME).';
   }
 }
+ui = initUI({
+  G, audio, store,
+  isDriving: () => G.mode === 'race' || G.mode === 'practice',
+  online: () => !!(G.online && net?.active),
+  setPaused, restartRace, leaveRace, setQuality, stepCar,
+  carName: () => carDefs.get(G.carId)?.params.name || G.carId,
+  trackName: () => manifest ? trackDef(G.trackId).name : '',
+  carCount: () => manifest ? manifest.cars.filter(d => carDefs.has(d.id)).length : 0,
+  groupCount: () => manifest ? garageGroups().length : 0,
+});
 requestAnimationFrame(frame);
 boot();

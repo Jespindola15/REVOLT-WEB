@@ -1,0 +1,189 @@
+/* Interfaz arcade (Fase 1): menú por pantallas, franja con rayas de carrera, botones de plástico.
+   Solo transform/opacity en las animaciones y nada de desenfoques, para no bajar los FPS del juego. */
+
+:root {
+  --blue: #2457d6;
+  --band-w: min(500px, 100%);
+  --slant: 52px;
+  --t-fast: .15s;
+  --t-mid: .22s;
+}
+
+/* ---------- Franja lateral (menú, pausa) ---------- */
+.band {
+  pointer-events: auto; position: absolute; top: 0; bottom: 0; left: 0; width: var(--band-w);
+  isolation: isolate; display: flex; flex-direction: column;
+  padding: max(20px, env(safe-area-inset-top, 0px)) calc(var(--slant) + 30px) max(18px, env(safe-area-inset-bottom, 0px)) max(24px, env(safe-area-inset-left, 0px));
+  background: var(--coral);
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%);
+}
+/* rayas de carrera: coral (fondo), amarilla y el panel azul tinta */
+.band::before, .band::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; z-index: -1; clip-path: polygon(0 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%); }
+.band::before { right: 9px; background: var(--volt); }
+.band::after { right: 20px; background: var(--ink); }
+
+.screen:not([hidden]) .band, .overlay:not([hidden]) .band { animation: bandIn var(--t-mid) ease-out; }
+@keyframes bandIn { from { transform: translateX(-36px); opacity: 0; } }
+
+/* ---------- Páginas ---------- */
+.page { display: flex; flex-direction: column; gap: 14px; min-height: 0; flex: 1 1 auto; }
+.page:not([hidden]) { animation: pageIn var(--t-mid) ease-out; }
+@keyframes pageIn { from { transform: translateX(-18px); opacity: 0; } }
+.pg-head { display: grid; grid-template-columns: 44px 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; }
+.pg-head .back { grid-row: 1 / 3; }
+.pg-head h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(26px, 5vw, 34px); line-height: 1; color: var(--volt); text-shadow: 3px 3px 0 var(--coral); text-transform: uppercase; letter-spacing: .5px; }
+.pg-head > span { font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+.pg-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 16px; padding: 4px 6px 4px 2px; scrollbar-width: thin; scrollbar-color: var(--ink-3) transparent; }
+.pg-foot { flex: none; padding-top: 4px; }
+.back { width: 44px; height: 44px; display: grid; place-items: center; background: var(--ink-2); color: var(--volt); border: 3px solid var(--ink-3); border-radius: 4px; font-size: 18px; padding: 0; transition: transform var(--t-fast), border-color var(--t-fast); }
+.back:hover, .back:focus-visible { border-color: var(--volt); transform: translateX(-3px); outline: none; }
+
+/* ---------- Logo ---------- */
+.band .logo { font-size: clamp(40px, 8vw, 58px); text-shadow: 4px 4px 0 var(--coral); margin: 4px 0 6px; }
+.band .logo small { letter-spacing: 4px; }
+
+/* ---------- Menú principal: botones inclinados de plástico ---------- */
+.mm { display: flex; flex-direction: column; gap: 10px; margin: 6px 0 0 14px; }
+.mm-item { position: relative; display: block; width: 100%; text-align: left; transform: skewX(-10deg); background: var(--ink-2); color: var(--paper);
+  border: 3px solid var(--ink-3); border-radius: 3px; padding: 9px 18px 10px; box-shadow: 0 0 0 transparent;
+  transition: transform var(--t-fast) ease-out, background-color var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast); }
+.mm-item > * { display: block; transform: skewX(10deg); }
+.mm-item b { font-family: var(--display); font-weight: 400; font-size: clamp(21px, 4.4vw, 27px); line-height: 1.05; text-transform: uppercase; letter-spacing: .5px; }
+.mm-item small { font-size: 12px; font-weight: 700; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+.mm-item::before { content: '▶'; position: absolute; left: -30px; top: 50%; transform: translate(-6px, -50%) skewX(10deg); color: var(--volt); font-size: 18px; opacity: 0; transition: opacity var(--t-fast), transform var(--t-fast); }
+.mm-item:hover, .mm-item:focus-visible, .mm-item.is-focus { background: var(--volt); color: var(--ink); border-color: var(--ink); transform: skewX(-10deg) translateX(10px); box-shadow: 6px 6px 0 var(--coral); outline: none; }
+.mm-item:hover small, .mm-item:focus-visible small, .mm-item.is-focus small { color: var(--ink-3); }
+.mm-item:focus-visible::before, .mm-item.is-focus::before { opacity: 1; transform: translate(0, -50%) skewX(10deg); }
+.mm-item:active { transform: skewX(-10deg) translateX(12px) translateY(2px); box-shadow: 3px 3px 0 var(--coral); }
+.mm-item[hidden] { display: none; }
+
+/* patente con el nombre del piloto */
+.plate { margin: auto 0 0 14px; display: grid; grid-template-columns: auto 1fr; align-items: center; position: relative; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); border-radius: 6px; box-shadow: 0 0 0 2px var(--paper), 5px 5px 0 2px rgba(0,0,0,.45); padding: 16px 12px 6px; max-width: 320px; }
+.plate::before { content: 'RE-VOLT · PILOTO'; position: absolute; left: 0; right: 0; top: 0; height: 12px; background: var(--blue); color: var(--paper); font-size: 9px; font-weight: 700; letter-spacing: 3px; text-align: center; line-height: 12px; border-radius: 3px 3px 0 0; }
+.plate > span { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #59607f; margin-right: 10px; }
+.plate input { background: transparent; border: 0; color: var(--ink); font-family: var(--display); font-size: 22px; letter-spacing: 2px; padding: 2px 0; min-width: 0; width: 100%; }
+.plate input:focus { outline: none; }
+.plate:focus-within { box-shadow: 0 0 0 2px var(--volt), 5px 5px 0 2px rgba(0,0,0,.45); }
+.plate input::placeholder { color: #9aa0b8; }
+
+/* ---------- Botones generales ---------- */
+.btn { transition: transform var(--t-fast) ease-out, box-shadow var(--t-fast); }
+.btn:hover:not([disabled]), .btn:focus-visible { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--coral); outline: none; }
+.btn.ghost:hover:not([disabled]), .btn.ghost:focus-visible { border-color: var(--volt); color: var(--volt); box-shadow: none; }
+.btn:active:not([disabled]) { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--coral); }
+.btn.big { width: 100%; font-size: clamp(20px, 4vw, 25px); padding: 14px 16px; text-transform: uppercase; }
+.chip { background: var(--ink-2); color: var(--volt); border: 2px solid var(--ink-3); border-radius: 3px; padding: 5px 10px; font-weight: 700; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; transition: border-color var(--t-fast), transform var(--t-fast); }
+.chip:hover, .chip:focus-visible { border-color: var(--volt); outline: none; transform: translateY(-1px); }
+
+/* selectores de opción (rivales, vueltas, nivel, calidad...) */
+.lapsel button { border-width: 3px; transition: transform var(--t-fast), background-color var(--t-fast), color var(--t-fast); }
+.lapsel button[aria-pressed=true] { background: var(--volt); color: var(--ink); border-color: var(--volt); }
+.lapsel button:hover { border-color: var(--volt); }
+.lapsel button:focus-visible { outline: 3px solid var(--paper); outline-offset: 2px; }
+
+/* lista de pistas (las tarjetas grandes vienen en la Fase 2) */
+.track-pick { display: flex; flex-direction: column; gap: 8px; }
+.tracksel { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.tracksel button { text-align: left; border-width: 3px; padding: 9px 10px; position: relative; transition: transform var(--t-fast), border-color var(--t-fast); }
+.tracksel button:hover { border-color: var(--volt); }
+.tracksel button[aria-pressed=true] { background: var(--volt); color: var(--ink); border-color: var(--volt); }
+.tracksel button:focus-visible { outline: 3px solid var(--paper); outline-offset: 2px; transform: translateX(3px); }
+#track-rec { min-height: 1.45em; }
+
+/* resumen del auto elegido */
+.car-sum { display: flex; align-items: center; gap: 10px; background: var(--ink-2); border-left: 4px solid var(--volt); padding: 8px 10px; border-radius: 2px; }
+.car-sum > span { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+.car-sum b { flex: 1; min-width: 0; font-family: var(--display); font-weight: 400; color: var(--volt); font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* multijugador */
+.mp-card { display: flex; flex-direction: column; gap: 8px; background: var(--ink-2); border: 3px solid var(--ink-3); border-radius: 4px; padding: 12px; }
+.mp-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-family: var(--display); font-size: 14px; }
+.mp-or::before, .mp-or::after { content: ''; flex: 1; border-top: 2px dashed var(--ink-3); }
+.join input { font-family: var(--display); font-size: 20px; }
+
+/* garage dentro del menú: el auto real se ve girando a la derecha */
+.page-garage .garage { background: transparent; border: 0; padding: 0; }
+
+/* opciones */
+.opt-body { display: flex; flex-direction: column; gap: 18px; }
+.opt-sec { display: flex; flex-direction: column; gap: 12px; border-top: 3px solid var(--ink-3); padding-top: 12px; }
+.opt-sec:first-child { border-top: 0; padding-top: 0; }
+.opt-sec h3 { margin: 0; font-family: var(--display); font-weight: 400; color: var(--volt); font-size: 19px; text-transform: uppercase; }
+.opt-row { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 10px; }
+.ctl { background: var(--ink-2); border: 2px solid var(--ink-3); border-radius: 4px; }
+.ctl summary { cursor: pointer; padding: 9px 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; font-size: 13px; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.ctl summary::-webkit-details-marker { display: none; }
+.ctl summary::after { content: '▼'; font-size: 10px; color: var(--volt); transition: transform var(--t-fast); }
+.ctl[open] summary::after { transform: rotate(180deg); }
+.ctl summary small { font-size: 11px; color: var(--muted); letter-spacing: 0; text-transform: none; margin-left: auto; }
+.ctl summary small.on { color: var(--good); }
+.ctl summary:focus-visible { outline: 3px solid var(--paper); outline-offset: 2px; }
+.keymap { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; padding: 0 12px 12px; font-size: 13px; }
+.keymap dt { white-space: nowrap; color: var(--muted); font-weight: 700; }
+.keymap dd { margin: 0; }
+kbd { font-family: var(--body); font-weight: 700; font-size: 11px; color: var(--paper); background: var(--ink); border: 1px solid var(--ink-3); border-bottom-width: 3px; border-radius: 3px; padding: 0 5px; margin: 0 1px; }
+
+/* estado (errores, "creando sala…") visible en cualquier página del menú */
+.band > .status { flex: none; margin: 8px 0 0; min-height: 0; }
+.band > .status:empty { display: none; }
+
+/* ayuda de navegación y resumen de auto/pista (abajo y arriba a la derecha) */
+.navhint { position: absolute; right: max(18px, env(safe-area-inset-right, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 14px; flex-wrap: wrap; justify-content: flex-end; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--paper); text-shadow: 1px 1px 0 #000; pointer-events: none; }
+.sel-chip { position: absolute; right: max(18px, env(safe-area-inset-right, 0px)); top: max(16px, env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none; }
+.sel-chip span { background: var(--ink); border-left: 4px solid var(--volt); padding: 4px 10px; font-weight: 700; font-size: 13px; letter-spacing: 1px; box-shadow: 4px 4px 0 rgba(0,0,0,.4); }
+.sel-chip span em { font-style: normal; color: var(--muted); font-size: 11px; margin-right: 8px; text-transform: uppercase; letter-spacing: 2px; }
+.sel-chip span b { font-family: var(--display); font-weight: 400; color: var(--volt); }
+@media (pointer: coarse) { .navhint { display: none; } }
+
+/* ---------- Pausa ---------- */
+.overlay { position: fixed; inset: 0; z-index: 35; background: rgba(8, 10, 22, .55); }
+.overlay:not([hidden]) { animation: fadeIn var(--t-fast) ease-out; }
+@keyframes fadeIn { from { opacity: 0; } }
+.pz-sub { margin: 0 0 4px 14px; font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+.menu-btn { min-width: 46px; font-size: 16px; letter-spacing: -2px; }
+
+/* ---------- Sala y resultados (rediseño completo en las fases 3 y 4) ---------- */
+.screen > .panel { background: var(--ink); border: 0; border-right: 8px solid var(--volt); border-radius: 0; box-shadow: 8px 0 0 var(--coral); margin: calc(-1 * max(16px, env(safe-area-inset-top, 0px))) 0 calc(-1 * max(16px, env(safe-area-inset-bottom, 0px))) calc(-1 * max(16px, env(safe-area-inset-left, 0px))); max-height: none; width: min(460px, 100%); padding-top: max(20px, env(safe-area-inset-top, 0px)); }
+.screen:not([hidden]) > .panel { animation: bandIn var(--t-mid) ease-out; }
+.screen > .panel .logo { text-shadow: 3px 3px 0 var(--coral); }
+
+/* ---------- Pantalla de carga ---------- */
+#loading .ld { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+#loading .logo { font-size: clamp(44px, 10vw, 76px); text-shadow: 4px 4px 0 var(--coral); text-align: center; }
+.ld-bar { width: min(280px, 70vw); height: 10px; background: var(--ink-2); border: 2px solid var(--ink-3); overflow: hidden; }
+.ld-bar i { display: block; width: 35%; height: 100%; background: var(--volt); animation: ldMove 1s ease-in-out infinite alternate; }
+@keyframes ldMove { from { transform: translateX(-100%); } to { transform: translateX(285%); } }
+
+/* ---------- Teclado / joystick: marca de foco bien visible ---------- */
+body.kbd-nav .screen button:focus:not(.mm-item), body.kbd-nav .overlay button:focus:not(.mm-item), body.kbd-nav .screen input:focus, body.kbd-nav .screen summary:focus { outline: 3px solid var(--paper); outline-offset: 2px; }
+
+/* ---------- Celular / pantallas angostas ---------- */
+@media (max-width: 640px) {
+  :root { --slant: 0px; }
+  .band { top: auto; width: 100%; max-height: 86%; height: auto; padding: 16px max(16px, env(safe-area-inset-right, 0px)) max(14px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); clip-path: none; }
+  .band::before, .band::after { right: 0; clip-path: none; }
+  .band::before { top: 6px; }
+  .band::after { top: 13px; }
+  .page[data-page=home] { gap: 10px; }
+  .band .logo { font-size: 36px; margin: 0; }
+  .mm { gap: 7px; margin-left: 10px; }
+  .mm-item { padding: 7px 14px 8px; }
+  .mm-item small { font-size: 10px; }
+  .plate { margin: 6px 0 0 10px; }
+  .sel-chip span { font-size: 11px; }
+  .screen > .panel { width: 100%; border-right: 0; box-shadow: none; border-top: 6px solid var(--volt); margin: 0 calc(-1 * max(16px, env(safe-area-inset-right, 0px))) calc(-1 * max(16px, env(safe-area-inset-bottom, 0px))) calc(-1 * max(16px, env(safe-area-inset-left, 0px))); max-height: 82%; }
+  .tracksel { grid-template-columns: 1fr 1fr; }
+  .overlay .band { max-height: 100%; }
+}
+@media (max-height: 560px) and (min-width: 641px) {
+  .band .logo { font-size: 34px; }
+  .mm { gap: 6px; }
+  .mm-item { padding: 5px 16px 6px; }
+  .mm-item small { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page:not([hidden]), .screen:not([hidden]) .band, .overlay:not([hidden]) .band, .overlay:not([hidden]), .screen:not([hidden]) > .panel { animation: none; }
+  .mm-item, .btn, .back, .chip, .lapsel button, .tracksel button { transition: none; }
+  .ld-bar i { animation: none; width: 100%; }
+}
