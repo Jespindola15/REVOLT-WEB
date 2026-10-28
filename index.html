@@ -121,6 +121,10 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
 .standings li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .standings li em { font-style: normal; font-size: 11px; color: var(--muted); letter-spacing: 1px; }
 
+/* minimapa */
+.minimap { width: 170px; height: 170px; margin-top: 6px; background: rgba(18,22,43,.55); border: 2px solid var(--ink-3); border-radius: 6px; }
+@media (max-width: 640px), (max-height: 480px) { .minimap { width: 110px; height: 110px; } }
+
 /* arma que tenés */
 .weapon { position: absolute; left: 50%; bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 58px); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: rgba(18,22,43,.82); border: 2px solid var(--volt); border-radius: 6px; padding: 4px 12px 4px 4px; box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
 .weapon i { width: 64px; height: 64px; background: var(--wicons) no-repeat; background-size: 512px 512px; background-position: calc(var(--wx, 0) * -2px) calc(var(--wy, 0) * -2px); flex: none; }
@@ -172,6 +176,7 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
     <div class="field">
       <span class="label">Pista</span>
       <div class="tracksel" id="tracksel"></div>
+      <p class="hint" id="track-rec"></p>
     </div>
     <div class="field">
       <span class="label">Elegí tu auto</span>
@@ -262,6 +267,8 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
     <div class="hud-big" id="h-lap">VUELTA 1/3</div>
     <div class="hud-small"><em>TIEMPO</em><span id="h-time">0:00.00</span></div>
     <div class="hud-small"><em>MEJOR</em><span id="h-best">--</span></div>
+    <div class="hud-small"><em>RÉCORD</em><span id="h-rec">--</span></div>
+    <canvas class="minimap" id="h-map" aria-label="Mapa de la pista"></canvas>
   </div>
   <div class="hud-tr">
     <div class="hud-big" id="h-pos"></div>

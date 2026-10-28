@@ -48,6 +48,16 @@ de las curvas, eligen caminos en las bifurcaciones y también agarran y usan
 armas. "Práctica libre" es para dar vueltas solo, sin rivales.
 
 
+MINIMAPA, RÉCORDS Y FANTASMA
+----------------------------
+- Arriba a la izquierda hay un mapa de la pista: vos sos la flecha amarilla,
+  tus amigos los puntos rojos y los rivales de la PC los blancos.
+- Cada pista guarda su récord de vuelta (en tu navegador) con el auto y el
+  nombre. Aparece en el menú, abajo de las pistas, y en la carrera.
+- En "Práctica libre" corre el FANTASMA de tu vuelta récord: un auto
+  transparente que repite esa vuelta, para que veas dónde ganás o perdés.
+
+
 CÓMO JUGAR ONLINE
 -----------------
 - Uno toca "Crear sala" y le aparece un código de 5 letras.

@@ -7,6 +7,8 @@ import { Net } from './net.js';
 import { GameAudio } from './audio.js';
 import { TrackCollider, Spinner } from './world.js';
 import { BotDriver, AiPath, DIFFICULTY, TUNE } from './ai.js';
+import { Minimap } from './minimap.js';
+import { Records, LapRecorder, ghostAt } from './ghost.js';
 import { Weapons, WEAPONS } from './weapons.js';
 
 THREE.ColorManagement.enabled = false;
@@ -161,6 +163,7 @@ async function setTrack(id) {
       G.pathHint = { from: null };
       audio.setMusic(def.music ? 'tracks/' + def.id + '/' + def.music : null);
       weapons.setTrack(T);
+      buildMinimap(T);
     }
     G.trackId = def.id;
     return T;
@@ -451,7 +454,14 @@ function updateLaps(now) {
   const L = G.lap;
   const lt = lapTick(L, G.phys.pos, now);
   if (lt == null) return;
-  toast('Vuelta ' + L.done + ': ' + fmt(lt) + (L.best === lt ? ' · ¡mejor!' : ''));
+  // récord de la pista (en este navegador), con el fantasma de esa vuelta
+  const isRec = records.submit(G.trackId, lt, { car: G.carId, name: G.name || 'Piloto' }, lapRec.s.length > 4 ? lapRec.s : null);
+  if (isRec) {
+    toast('¡NUEVO RÉCORD! ' + fmt(lt));
+    audio.play('pickgen', { vol: 0.9 });
+    updateRecordLabels();
+    if (G.mode === 'practice') loadGhost();
+  } else toast('Vuelta ' + L.done + ': ' + fmt(lt) + (L.best === lt ? ' · ¡mejor!' : ''));
   audio.play('pickup', { vol: 0.8 });
   if (G.mode === 'race' && L.done >= G.laps) finishRace(now);
 }
@@ -503,12 +513,13 @@ async function startPractice() {
   await spawnMyCar(0);
   G.mode = 'practice'; G.online = false; G.laps = Infinity;
   G.myPlace = 1; G.nPlace = 1;
+  loadGhost();
   weapons.clearAll();
   show(null); startCountdown(performance.now());
 }
 
 async function startRace(laps, grid, trackId) {
-  audio.unlock(); clearBots();
+  audio.unlock(); clearBots(); clearGhost();
   if (trackId) await setTrack(trackId);
   const idx = Math.max(0, grid.indexOf(net.myId));
   await spawnMyCar(idx);
@@ -537,7 +548,7 @@ function clearBots() {
   G.bots = [];
 }
 async function startBotRace() {
-  audio.unlock();
+  audio.unlock(); clearGhost();
   await setTrack(G.trackId);
   clearBots();
   if (!track.path) { $('menu-status').textContent = 'Esta pista no tiene recorrido para los rivales.'; return; }
@@ -627,6 +638,67 @@ function botCollisions() {
     else if (hit > 300) audio.playAt('hit1', a.phys.pos, { vol: Math.min(1, hit / 2000) });
     if (hit) { weapons.onCarContact(a.id, b.id); weapons.onCarContact(b.id, a.id); }
   }
+}
+
+// ---------- Minimapa ----------
+const minimap = new Minimap($('h-map'));
+function buildMinimap(T) {
+  const segs = [];
+  if (T.ai) for (const n of T.ai.nodes) for (const j of n.next) { const m = T.ai.nodes[j]; segs.push({ a: n.p, b: m.p, w: (n.w + m.w) / 2 }); }
+  else if (T.path) {
+    const P = n => ({ x: n.pos[0], z: -n.pos[2] });
+    for (const n of T.path.nodes) for (const j of n.next) segs.push({ a: P(n), b: P(T.path.nodes[j]), w: 450 });
+  }
+  const S = rv2three(...T.inf.startPos), a = T.inf.startRot * Math.PI * 2;
+  const f = rv2three(Math.sin(a), 0, Math.cos(a));
+  minimap.setTrack(segs, { x: S[0], z: S[2] }, { x: f[0], z: f[2] });
+}
+let mapT = 0;
+function drawMinimap(now) {
+  if (now - mapT < 33) return; mapT = now;
+  const cars = [];
+  for (const o of G.others || []) if (o.visible) cars.push({ x: o.pos.x, z: o.pos.z, color: '#ff6b5a' });
+  for (const b of G.bots) cars.push({ x: b.rpos.x, z: b.rpos.z, color: '#f4f4f4' });
+  if (G.ghost?.vis?.root.visible) cars.push({ x: G.ghost.vis.root.position.x, z: G.ghost.vis.root.position.z, color: '#8fd3ff', ghost: true });
+  const d = new THREE.Vector3(0, 0, -1).applyQuaternion(G.renderQuat);
+  cars.push({ x: G.renderPos.x, z: G.renderPos.z, dir: { x: d.x, z: d.z }, color: '#ffd23f', me: true });
+  minimap.draw(cars);
+}
+
+// ---------- Récords y fantasma ----------
+const records = new Records(store);
+const lapRec = new LapRecorder();
+function updateRecordLabels() {
+  const r = records.get(G.trackId);
+  $('h-rec').textContent = r ? fmt(r.lap) : '--';
+  const el = $('track-rec');
+  el.textContent = r ? `Récord: ${fmt(r.lap)} · ${carDefs.get(r.car)?.params.name || r.car} · ${r.name}` : 'Sin récord todavía en esta pista';
+}
+function clearGhost() { if (G.ghost?.vis) G.ghost.vis.dispose(); G.ghost = null; }
+// el fantasma de la mejor vuelta aparece en la práctica libre
+async function loadGhost() {
+  clearGhost();
+  const g = records.ghost(G.trackId); if (!g || !carDefs.has(g.car)) return;
+  const tid = G.trackId;
+  try { await ensureCar(g.car); } catch (e) { return; }
+  if (G.mode !== 'practice' || G.trackId !== tid) return;
+  clearGhost();
+  const vis = new CarVisual(g.car);
+  vis.root.traverse(o => {
+    if (!o.isMesh) return;
+    o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.35; o.material.depthWrite = false;
+  });
+  vis.setName('FANTASMA');
+  vis.root.visible = false;
+  G.ghost = { data: g, vis, pos: new THREE.Vector3(), quat: new THREE.Quaternion(), tmp: new THREE.Quaternion() };
+}
+function updateGhost(now) {
+  const gh = G.ghost; if (!gh) return;
+  const L = G.lap;
+  const on = G.mode === 'practice' && L.started && !G.locked;
+  const t = (now - L.lapStart) / 1000;
+  gh.vis.root.visible = on && ghostAt(gh.data.s, t, gh.pos, gh.quat, gh.tmp);
+  if (gh.vis.root.visible) { gh.vis.root.position.copy(gh.pos); gh.vis.root.quaternion.copy(gh.quat); }
 }
 
 // ---------- Menú ----------
@@ -742,14 +814,14 @@ $('btn-start').onclick = () => {
 $('btn-leave').onclick = () => { net?.close(); net = null; clearRemotes(); G.online = false; toMenu(); };
 $('btn-res-back').onclick = () => { if (G.online && net?.active) { G.mode = 'lobby'; spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu(); };
 $('btn-quit').onclick = () => {
-  if (G.online && net?.active) { G.mode = 'lobby'; weapons.clearAll(); spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu();
+  if (G.online && net?.active) { G.mode = 'lobby'; weapons.clearAll(); clearGhost(); spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu();
 };
 
 // lugar en la grilla según el orden de la sala (así en la sala nadie aparece encima de otro)
 function lobbySlot() { return net?.active ? Math.max(0, [...net.players.keys()].indexOf(net.myId)) : 0; }
 let lastLobbySlot = -1;
 
-function toMenu() { G.mode = 'menu'; G.locked = true; weapons.clearAll(); clearBots(); $('btn-res-back').textContent = 'Volver a la sala'; renderTrackButtons($('tracksel')); spawnMyCar(0); show('scr-menu'); }
+function toMenu() { G.mode = 'menu'; G.locked = true; weapons.clearAll(); clearBots(); clearGhost(); $('btn-res-back').textContent = 'Volver a la sala'; renderTrackButtons($('tracksel')); spawnMyCar(0); show('scr-menu'); }
 
 // ---------- Selección de pista ----------
 function renderTrackButtons(el) {
@@ -764,6 +836,7 @@ function renderTrackButtons(el) {
 }
 async function chooseTrack(id) {
   G.trackId = id; store.set('rv.track', id);
+  updateRecordLabels();
   for (const el of [$('tracksel'), $('lobby-tracksel')]) [...el.children].forEach(c => c.setAttribute('aria-pressed', c.dataset.id === id));
   if (net?.active && net.isHost) net.send({ t: 'track', track: id });
   updateLobbyTrack();
@@ -1159,7 +1232,15 @@ function frame(now) {
     b.vis.root.position.copy(b.rpos); b.vis.root.quaternion.copy(b.rquat);
     b.vis.setWheels(b.phys.wheels.map(w => w.suspOffset), b.phys.wheels.map(w => w.steerAngle || 0), b.phys.wheels.map(w => w.spin));
   }
-  if (driving) updateLaps(now);
+  if (driving) {
+    updateLaps(now);
+    const L = G.lap;
+    if (L.started && !L.finished && !G.locked) {
+      if (lapRec.start !== L.lapStart) lapRec.begin(L.lapStart);
+      lapRec.sample(now, G.renderPos, G.renderQuat);
+    }
+    updateGhost(now);
+  }
   G.others = [];
   for (const [id, r] of G.remotes) {
     if (!r.vis || !r.tpos) continue;
@@ -1198,6 +1279,7 @@ function frame(now) {
     }
     $('h-best').textContent = fmt(L.best);
     updateArrow(dt);
+    drawMinimap(now);
   }
   // sonido: motor propio, golpes contra la pista, rivales y oyente en la cámara
   audio.updateOwn(Math.abs(P.fwdSpeed) / P.top, inp.throttle, P.skid || 0, driving);
@@ -1242,6 +1324,7 @@ async function boot() {
     syncVolumes();
     renderCars();
     renderTrackButtons($('tracksel'));
+    updateRecordLabels();
     await spawnMyCar(0);
     G.mode = 'menu'; show('scr-menu');
     $('loading').hidden = true;
@@ -1259,7 +1342,7 @@ async function boot() {
       }
       return now;
     };
-    window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate, audio, weapons, THREE, gridSlot, startBotRace, botProgress, TUNE };
+    window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate, audio, weapons, THREE, gridSlot, startBotRace, botProgress, TUNE, records, BotDriver, botNav };
   } catch (e) {
     console.error(e);
     $('loadmsg').textContent = 'No se pudo cargar: ' + e.message + '. Si abriste el archivo con doble clic, tiene que estar subido a una página web (ver LEEME).';
