@@ -114,6 +114,7 @@ export function parseINF(text) {
     startRot: parseFloat(inf.STARTROT || '0'),
     fogColor: nums(inf.FOGCOLOR || '80 144 192'),
     farClip: parseFloat(inf.FARCLIP || '24000'),
+    fogStart: parseFloat(inf.FOGSTART || '9000'),
   };
 }
 

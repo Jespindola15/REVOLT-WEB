@@ -32,24 +32,40 @@ window.addEventListener('resize', resize); resize();
 async function fetchBuf(url) { const r = await fetch(url); if (!r.ok) throw new Error('No se encontró ' + url); return r.arrayBuffer(); }
 async function fetchText(url) { const r = await fetch(url); if (!r.ok) throw new Error('No se encontró ' + url); return r.text(); }
 
-let manifest, track, world, carDefs = new Map();
+let manifest, track = null, world = null;
+const carDefs = new Map();    // id -> { def, params, body?, wheels?, box?, loading? }
+const trackCache = new Map(); // id -> Promise<pista armada>
 
-async function loadTrack() {
-  const T = manifest.track, dir = BASE + 'tracks/' + T.id + '/';
-  $('loadmsg').textContent = 'Pista: ' + T.name;
+function trackDef(id) { return manifest.tracks.find(t => t.id === id) || manifest.tracks[0]; }
+function carDef(id) { return manifest.cars.find(c => c.id === id); }
+
+// Compatibilidad con el manifest viejo (una sola pista, texturas tex0.png...)
+function normalizeManifest(m) {
+  if (!m.tracks && m.track) m.tracks = [m.track];
+  for (const t of m.tracks) {
+    if (Array.isArray(t.pages)) { const o = {}; for (const p of t.pages) o[p] = 'tex' + p + '.png'; t.pages = o; }
+  }
+  for (const c of m.cars) { c.tex ??= 'car.png'; c.group ??= 'Autos'; }
+  return m;
+}
+
+async function buildTrack(T) {
+  const dir = BASE + 'tracks/' + T.id + '/';
   const [wBuf, finBuf, tazBuf, infTxt] = await Promise.all([
-    fetchBuf(dir + T.id + '.w'), fetchBuf(dir + T.id + '.fin'), fetchBuf(dir + T.id + '.taz'), fetchText(dir + T.id + '.inf'),
+    fetchBuf(dir + T.id + '.w'), fetchBuf(dir + T.id + '.fin').catch(() => null),
+    fetchBuf(dir + T.id + '.taz'), fetchText(dir + T.id + '.inf'),
   ]);
   const textures = [];
-  await Promise.all(T.pages.map(async p => { textures[p] = await loadTexture(dir + 'tex' + p + '.png'); }));
+  await Promise.all(Object.entries(T.pages).map(async ([p, file]) => { textures[+p] = await loadTexture(dir + file); }));
   const getMat = makeMaterials(textures);
   const inf = parseINF(infTxt);
   const meshes = parseW(wBuf);
   // Instancias (.fin): casas, árboles, postes, rampas...
-  const fins = parseFIN(finBuf);
+  const fins = finBuf ? parseFIN(finBuf) : [];
   const prmCache = new Map();
+  const keys = Object.keys(T.instances || {});
   for (const f of fins) {
-    const key = Object.keys(T.instances).find(k => k === f.name) || Object.keys(T.instances).find(k => f.name.startsWith(k) || k.startsWith(f.name));
+    const key = keys.find(k => k === f.name) || keys.find(k => f.name.startsWith(k) || k.startsWith(f.name));
     if (!key) continue;
     const def = T.instances[key];
     if (!prmCache.has(def.prm)) prmCache.set(def.prm, parsePRM(await fetchBuf(dir + def.prm)));
@@ -64,25 +80,50 @@ async function loadTrack() {
     });
   }
   const built = buildMeshes(meshes, getMat, { brightness: 1.0 });
-  scene.add(built.group);
   const cg = new THREE.BufferGeometry();
   cg.setAttribute('position', new THREE.BufferAttribute(built.collision, 3));
   const bvh = new MeshBVH(cg);
-  world = { bvh };
   const fc = inf.fogColor.map(v => v / 255);
-  scene.background = new THREE.Color(fc[0], fc[1], fc[2]);
-  scene.fog = new THREE.Fog(scene.background, 9000, Math.max(20000, inf.farClip + 2000));
+  const bg = new THREE.Color(fc[0], fc[1], fc[2]);
+  const far = Math.max(20000, inf.farClip + 2000);
+  const fog = new THREE.Fog(bg, Math.min(inf.fogStart, inf.farClip * 0.55), far);
   const zones = parseTAZ(tazBuf);
   const nZones = Math.max(...zones.map(z => z.id)) + 1;
-  await buildSky(dir, T.sky || {});
+  const skyGroup = await buildSky(dir, T.sky || {});
   let path = null;
   try { path = parsePAN(await fetchBuf(dir + T.id + '.pan')); } catch (e) {}
-  track = { inf, zones, nZones, name: T.name, path };
+  return { id: T.id, name: T.name, inf, zones, nZones, path, group: built.group, sky: skyGroup, bvh, bg, fog, far };
 }
 
-// Cielo: caja de 6 caras con las texturas sky_*.bmp de la pista, que acompaña a la cámara
-const sky = new THREE.Group();
+function loadTrackCached(id) {
+  if (!trackCache.has(id)) {
+    trackCache.set(id, buildTrack(trackDef(id)).catch(e => { trackCache.delete(id); throw e; }));
+  }
+  return trackCache.get(id);
+}
+
+// Cambia la pista que se ve y contra la que choca el auto
+async function setTrack(id) {
+  const def = trackDef(id);
+  const needLoad = !trackCache.has(def.id);
+  if (needLoad) busy('Cargando ' + def.name + '…');
+  try {
+    const T = await loadTrackCached(def.id);
+    if (track !== T) {
+      if (track) { scene.remove(track.group); scene.remove(track.sky); }
+      scene.add(T.group); if (T.sky.children.length) scene.add(T.sky);
+      scene.background = T.bg; scene.fog = T.fog;
+      camera.far = Math.max(32000, T.far + 4000); camera.updateProjectionMatrix();
+      track = T; world = { bvh: T.bvh };
+    }
+    G.trackId = def.id;
+    return T;
+  } finally { if (needLoad) busy(null); }
+}
+
+// Cielo: caja de 6 caras con las texturas sky_* de la pista, que acompaña a la cámara
 async function buildSky(dir, files) {
+  const sky = new THREE.Group();
   const S = 20000, h = S / 2;
   const faces = {
     ft: { p: [0, 0, -h], r: [0, 0, 0] },
@@ -100,22 +141,43 @@ async function buildSky(dir, files) {
     m.position.set(...f.p); m.rotation.set(...f.r); m.renderOrder = -10;
     sky.add(m);
   }
-  if (sky.children.length) { sky.frustumCulled = false; scene.add(sky); }
+  sky.frustumCulled = false;
+  return sky;
 }
 
-async function loadCar(def) {
-  const dir = BASE + 'cars/' + def.id + '/';
-  const [txt, tex] = await Promise.all([fetchText(dir + 'parameters.txt'), loadTexture(dir + 'car.png')]);
-  const params = parseCarParams(txt);
-  // En los autos cualquier página de textura >= 0 es la textura del auto (TPAGE)
-  const carMats = makeMaterials([tex]);
-  const getMat = (page, tr) => carMats(page >= 0 ? 0 : -1, tr);
-  const prms = {};
-  for (const [i, fn] of Object.entries(def.models)) prms[i] = parsePRM(await fetchBuf(dir + fn));
-  const body = buildMeshes([{ polys: prms[0].polys, verts: prms[0].verts }], getMat).group;
-  const box = new THREE.Box3().setFromObject(body);
-  const wheels = [1, 2, 3, 4].map(i => prms[i] ? buildMeshes([{ polys: prms[i].polys, verts: prms[i].verts }], getMat).group : null);
-  carDefs.set(def.id, { def, params, body, wheels, box });
+// Parámetros de todos los autos al arrancar (livianos); los modelos 3D se bajan cuando hacen falta
+async function loadCarParams(def) {
+  const txt = await fetchText(BASE + 'cars/' + def.id + '/parameters.txt');
+  carDefs.set(def.id, { def, params: parseCarParams(txt) });
+}
+
+function ensureCar(id) {
+  const cd = carDefs.get(id);
+  if (!cd) return Promise.reject(new Error('Auto desconocido: ' + id));
+  if (cd.body) return Promise.resolve(cd);
+  cd.loading ??= (async () => {
+    const def = cd.def, dir = BASE + 'cars/' + def.id + '/';
+    const tex = def.tex ? await loadTexture(dir + def.tex) : null;
+    // En los autos cualquier página de textura >= 0 es la textura del auto (TPAGE)
+    const carMats = makeMaterials([tex]);
+    const getMat = (page, tr) => carMats(page >= 0 && tex ? 0 : -1, tr);
+    const prms = {};
+    await Promise.all(Object.entries(def.models).map(async ([i, fn]) => { prms[i] = parsePRM(await fetchBuf(dir + fn)); }));
+    cd.body = buildMeshes([{ polys: prms[0].polys, verts: prms[0].verts }], getMat).group;
+    cd.box = new THREE.Box3().setFromObject(cd.body);
+    cd.wheels = [1, 2, 3, 4].map(i => prms[i] ? buildMeshes([{ polys: prms[i].polys, verts: prms[i].verts }], getMat).group : null);
+    return cd;
+  })().catch(e => { cd.loading = null; throw e; });
+  return cd.loading;
+}
+
+// Aviso de carga sobre el juego (para cambios de pista o de auto)
+let busyCount = 0;
+function busy(msg) {
+  busyCount += msg ? 1 : -1;
+  const el = $('busy');
+  if (msg) el.textContent = msg;
+  el.hidden = busyCount <= 0;
 }
 
 // Los costados de las ruedas de Re-Volt son conos que terminan en punta sobre el eje.
@@ -186,6 +248,7 @@ class CarVisual {
 const G = {
   mode: 'loading', // menu | lobby | race | practice | results
   carId: store.get('rv.car', 'rc'),
+  trackId: store.get('rv.track', 'nhood1'),
   name: store.get('rv.name', ''),
   phys: null, vis: null,
   laps: 3, raceStart: 0, goTime: 0, locked: true,
@@ -218,11 +281,17 @@ function gridSlot(i) {
   return { pos: p, yaw: Math.atan2(-f.x, -f.z) };
 }
 
-function spawnMyCar(slot = 0) {
+let spawnSeq = 0;
+async function spawnMyCar(slot = 0) {
+  const seq = ++spawnSeq;
+  let cd;
+  if (!carDefs.get(G.carId)?.body) { busy('Cargando auto…'); try { cd = await ensureCar(G.carId); } finally { busy(null); } }
+  else cd = carDefs.get(G.carId);
+  if (seq !== spawnSeq) return; // llegó otro pedido mientras cargaba
   if (G.vis) G.vis.dispose();
-  const cd = carDefs.get(G.carId);
   G.phys = new CarPhysics(cd.params, cd.box, world);
   G.vis = new CarVisual(G.carId);
+  G.prevPos = null;
   const s = gridSlot(slot);
   G.phys.place(s.pos, s.yaw);
 }
@@ -341,35 +410,45 @@ function startCountdown(now) {
   G.locked = true; G.goTime = now + 3000; resetLaps(); G.results = []; $('res-body').innerHTML = '';
 }
 
-function startPractice() {
-  G.mode = 'practice'; G.online = false; G.laps = Infinity;
-  spawnMyCar(0); show(null); startCountdown(performance.now());
+async function startPractice() {
   audio.start();
+  await setTrack(G.trackId);
+  await spawnMyCar(0);
+  G.mode = 'practice'; G.online = false; G.laps = Infinity;
+  show(null); startCountdown(performance.now());
 }
 
-function startRace(laps, grid) {
-  G.mode = 'race'; G.laps = laps;
-  const idx = Math.max(0, grid.indexOf(net.myId));
-  spawnMyCar(idx); show(null); startCountdown(performance.now());
+async function startRace(laps, grid, trackId) {
   audio.start();
+  if (trackId) await setTrack(trackId);
+  const idx = Math.max(0, grid.indexOf(net.myId));
+  await spawnMyCar(idx);
+  G.mode = 'race'; G.laps = laps;
+  show(null); startCountdown(performance.now());
 }
 
 // ---------- Menú ----------
 function stat(v, max) { return Math.round(Math.max(6, Math.min(100, v / max * 100))); }
 function renderCars() {
   const el = $('cars'); el.innerHTML = '';
+  let group = null;
   for (const def of manifest.cars) {
-    const cd = carDefs.get(def.id); const P = cd.params;
+    const cd = carDefs.get(def.id); if (!cd) continue; const P = cd.params;
+    if (def.group !== group) {
+      group = def.group;
+      const h = document.createElement('div'); h.className = 'car-group'; h.textContent = group; el.appendChild(h);
+    }
     const top = P.topEnd > 100 ? P.topEnd : P.topSpeed * 85.4;
     const b = document.createElement('button');
     b.className = 'car'; b.type = 'button'; b.setAttribute('aria-pressed', def.id === G.carId);
+    const acc = P.acc > 0 && P.acc < 15 ? P.acc : top / 2.4 / 175;
     b.innerHTML = `<b>${esc(P.name)}</b><span class="bars">
-      <span>VEL</span><span class="bar"><i style="width:${stat(top, 3600)}%"></i></span>
-      <span>ACC</span><span class="bar"><i style="width:${stat(P.acc, 9)}%"></i></span>
+      <span>VEL</span><span class="bar"><i style="width:${stat(top, 4500)}%"></i></span>
+      <span>ACC</span><span class="bar"><i style="width:${stat(acc, 9)}%"></i></span>
       <span>PESO</span><span class="bar"><i style="width:${stat(P.mass, 2.2)}%"></i></span></span>`;
     b.onclick = () => {
       G.carId = def.id; store.set('rv.car', def.id);
-      [...el.children].forEach(c => c.setAttribute('aria-pressed', c === b));
+      [...el.querySelectorAll('.car')].forEach(c => c.setAttribute('aria-pressed', c === b));
       spawnMyCar(0);
       if (net?.active && !net.isHost) net.send({ t: 'car', car: def.id });
     };
@@ -405,6 +484,9 @@ function enterLobby(code) {
   G.mode = 'lobby';
   $('lobby-code').textContent = code;
   $('btn-start').hidden = !net.isHost; $('lap-field').hidden = !net.isHost; $('lobby-wait').hidden = net.isHost;
+  $('lobby-track-field').hidden = !net.isHost; $('lobby-track-name').hidden = net.isHost;
+  renderTrackButtons($('lobby-tracksel'));
+  updateLobbyTrack();
   $('lobby-sub').textContent = net.isHost ? 'PASALE ESTE CÓDIGO A TUS AMIGOS' : 'CONECTADO A LA SALA';
   spawnMyCar(0);
   show('scr-lobby');
@@ -418,8 +500,8 @@ $('lapsel').addEventListener('click', e => {
 $('btn-start').onclick = () => {
   const laps = +($('lapsel').querySelector('[aria-pressed=true]')?.dataset.l || 3);
   const grid = [...net.players.keys()];
-  net.send({ t: 'start', laps, grid });
-  startRace(laps, grid);
+  net.send({ t: 'start', laps, grid, track: G.trackId });
+  startRace(laps, grid, G.trackId);
 };
 $('btn-leave').onclick = () => { net?.close(); net = null; clearRemotes(); G.online = false; toMenu(); };
 $('btn-res-back').onclick = () => { if (G.online && net?.active) { G.mode = 'lobby'; show('scr-lobby'); } else toMenu(); };
@@ -427,20 +509,53 @@ $('btn-quit').onclick = () => {
   if (G.online && net?.active) { G.mode = 'lobby'; show('scr-lobby'); } else toMenu();
 };
 
-function toMenu() { G.mode = 'menu'; G.locked = true; spawnMyCar(0); show('scr-menu'); }
+function toMenu() { G.mode = 'menu'; G.locked = true; renderTrackButtons($('tracksel')); spawnMyCar(0); show('scr-menu'); }
+
+// ---------- Selección de pista ----------
+function renderTrackButtons(el) {
+  el.innerHTML = '';
+  for (const t of manifest.tracks) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = t.name; b.dataset.id = t.id;
+    b.setAttribute('aria-pressed', t.id === G.trackId);
+    b.onclick = () => chooseTrack(t.id);
+    el.appendChild(b);
+  }
+}
+async function chooseTrack(id) {
+  G.trackId = id; store.set('rv.track', id);
+  for (const el of [$('tracksel'), $('lobby-tracksel')]) [...el.children].forEach(c => c.setAttribute('aria-pressed', c.dataset.id === id));
+  if (net?.active && net.isHost) net.send({ t: 'track', track: id });
+  updateLobbyTrack();
+  try { await setTrack(id); if (G.trackId === id) await spawnMyCar(0); }
+  catch (e) { $('menu-status').textContent = 'No se pudo cargar la pista: ' + e.message; }
+}
+function updateLobbyTrack() { $('lobby-track-name').textContent = 'Pista: ' + trackDef(G.trackId).name; }
 
 // ---------- Red ----------
-function clearRemotes() { for (const r of G.remotes.values()) r.vis.dispose(); G.remotes.clear(); }
+function clearRemotes() { for (const r of G.remotes.values()) r.vis?.dispose(); G.remotes.clear(); }
+function dropRemote(id) { const r = G.remotes.get(id); if (r) { r.vis?.dispose(); G.remotes.delete(id); } }
 function ensureRemote(id, carId, name) {
+  if (!carDefs.has(carId)) carId = 'rc';
   let r = G.remotes.get(id);
-  if (r && r.carId !== carId && carDefs.has(carId)) { r.vis.dispose(); G.remotes.delete(id); r = null; }
   if (!r) {
-    if (!carDefs.has(carId)) carId = 'rc';
-    const vis = new CarVisual(carId); vis.setName(name || 'Piloto');
-    r = { vis, carId, name, pos: new THREE.Vector3(0, -1e5, 0), quat: new THREE.Quaternion(), vel: new THREE.Vector3(), tpos: null, tquat: new THREE.Quaternion(), prog: 0, susp: [], steer: [], spin: [0, 0, 0, 0], radius: carDefs.get(carId).box.getSize(new THREE.Vector3()).z * 0.5, seen: 0 };
+    r = { vis: null, carId, name, pos: new THREE.Vector3(0, -1e5, 0), quat: new THREE.Quaternion(), vel: new THREE.Vector3(), tpos: null, tquat: new THREE.Quaternion(), prog: 0, susp: [], steer: [], spin: [0, 0, 0, 0], radius: 50, seen: 0 };
     G.remotes.set(id, r);
-  } else if (name && r.name !== name) { r.name = name; r.vis.setName(name); }
+    attachRemoteVis(id, r);
+  } else {
+    if (r.carId !== carId) { r.carId = carId; attachRemoteVis(id, r); }
+    if (name && r.name !== name) { r.name = name; r.vis?.setName(name); }
+  }
   return r;
+}
+// Carga el modelo del auto de un rival y lo muestra cuando está listo
+async function attachRemoteVis(id, r) {
+  const want = r.carId;
+  try { await ensureCar(want); } catch (e) { return; }
+  if (G.remotes.get(id) !== r || r.carId !== want) return;
+  r.vis?.dispose();
+  r.vis = new CarVisual(want); r.vis.setName(r.name || 'Piloto');
+  r.radius = carDefs.get(want).box.getSize(new THREE.Vector3()).z * 0.5;
 }
 const netHandlers = {
   onStatus: msg => { $('lobby-status').textContent = msg; $('menu-status').textContent = msg; },
@@ -448,8 +563,10 @@ const netHandlers = {
     $('lobby-players').innerHTML = list.map(p => `<li><span>${esc(p.name)}${p.id === net.myId ? ' (vos)' : ''}${p.id === 'host' ? ' ★' : ''}</span><span>${esc(carDefs.get(p.car)?.params.name || p.car)}</span></li>`).join('');
     const ids = new Set(list.map(p => p.id));
     for (const p of list) if (p.id !== net.myId) ensureRemote(p.id, p.car, p.name);
-    for (const [id, r] of G.remotes) if (!ids.has(id)) { r.vis.dispose(); G.remotes.delete(id); }
+    for (const id of [...G.remotes.keys()]) if (!ids.has(id)) dropRemote(id);
     $('btn-start').disabled = false;
+    // el anfitrión le avisa la pista a quien recién entra
+    if (net.isHost) net.send({ t: 'track', track: G.trackId });
   },
   onState: d => {
     if (d.id === net?.myId) return;
@@ -460,9 +577,16 @@ const netHandlers = {
     r.susp = d.su; r.steer = d.st; r.prog = d.pr; r.seen = performance.now();
   },
   onEvent: d => {
-    if (d.t === 'start') { startRace(d.laps, d.grid); }
+    if (d.t === 'start') { startRace(d.laps, d.grid, d.track); }
+    else if (d.t === 'track') {
+      const tid = d.track;
+      if (manifest.tracks.some(t => t.id === tid) && tid !== G.trackId) {
+        G.trackId = tid; updateLobbyTrack();
+        setTrack(tid).then(() => { if (G.trackId === tid && G.mode === 'lobby') spawnMyCar(0); }).catch(() => {});
+      }
+    }
     else if (d.t === 'finish') { addResult({ id: d.id, name: d.name, time: d.time }); if (G.mode === 'race') toast(d.name + ' llegó: ' + fmt(d.time)); }
-    else if (d.t === 'gone') { const r = G.remotes.get(d.id); if (r) { r.vis.dispose(); G.remotes.delete(d.id); } }
+    else if (d.t === 'gone') { dropRemote(d.id); }
     else if (d.t === 'hostgone') { clearRemotes(); G.online = false; toMenu(); $('menu-status').textContent = 'El anfitrión cerró la sala.'; }
     else if (d.t === 'full') { $('menu-status').textContent = 'La sala está llena (máximo 8).'; }
   },
@@ -545,7 +669,8 @@ const audio = {
 // ---------- Cámara ----------
 // autos grandes (como el Panga) llevan la cámara un poco más lejos
 function carScale() {
-  const cd = carDefs.get(G.carId); if (!cd) return 1;
+  // el auto que se ve en pantalla (el elegido puede estar todavía bajándose)
+  const cd = carDefs.get(G.vis?.carId); if (!cd?.box) return 1;
   let ext = (cd.box.max.z - cd.box.min.z) / 2;
   for (const w of cd.params.wheels) if (w.present) ext = Math.max(ext, Math.abs(w.offset1[2]) + w.radius, Math.abs(w.offset1[0]) + w.radius);
   return Math.max(1, Math.min(2, ext / 55));
@@ -598,25 +723,50 @@ function updateCamera(dt) {
   camera.position.copy(camPos); camera.lookAt(camLook);
 }
 
-// ---------- Flecha de dirección y tabla de posiciones ----------
-let arrowAngle = 0, wrongT = 0, standT = 0;
+// ---------- Aviso de curvas y tabla de posiciones ----------
+// Dirección de la pista (horizontal) en un punto a cierta distancia por delante, según los nodos del recorrido
+function pathDirAt(pos, dist) {
+  const a = pathAhead(pos, dist), b = pathAhead(pos, dist + 200);
+  if (!a || !b) return null;
+  const d = b.sub(a); d.y = 0;
+  return d.lengthSq() > 1 ? d.normalize() : null;
+}
+let curveT = 0, curveShown = 0, wrongT = 0, standT = 0;
 function updateArrow(dt) {
   const el = $('h-arrow');
   if (!track.path || G.lap.finished) { el.hidden = true; $('h-wrong').hidden = true; return; }
-  const target = pathAhead(G.renderPos, 900);
-  if (!target) { el.hidden = true; return; }
+  const now = pathDirAt(G.renderPos, 0);
+  if (!now) { el.hidden = true; return; }
+  // ¿Cuánto gira la pista en los próximos metros? Se busca la curva más fuerte que viene.
+  // A más velocidad se mira más lejos, para avisar con tiempo.
+  const reach = 1500 + Math.min(3000, Math.abs(G.phys.fwdSpeed) * 0.9);
+  let turn = 0;
+  for (let d = 300; d <= reach; d += 200) {
+    const ahead = pathDirAt(G.renderPos, d); if (!ahead) break;
+    const ang = Math.atan2(now.x * ahead.z - now.z * ahead.x, now.x * ahead.x + now.z * ahead.z); // + = derecha
+    if (Math.abs(ang) > Math.abs(turn)) turn = ang;
+  }
+  // 1 a 3 flechas según lo cerrada que sea la curva; nada en las rectas
+  const level = Math.abs(turn) < 0.45 ? 0 : Math.abs(turn) < 0.9 ? 1 : Math.abs(turn) < 1.5 ? 2 : 3;
+  const side = turn > 0 ? 'right' : 'left';
+  // evitar parpadeos: el aviso se mantiene un momento aunque la medición baje
+  if (level > 0) { curveT = 0.6; curveShown = level * (side === 'right' ? 1 : -1); }
+  else curveT -= dt;
+  if (curveT <= 0) { el.hidden = true; }
+  else {
+    const n = Math.abs(curveShown), right = curveShown > 0;
+    const key = (right ? 'r' : 'l') + n;
+    if (el.dataset.key !== key) {
+      el.dataset.key = key;
+      el.className = 'curve ' + (right ? 'right' : 'left') + ' lvl' + n;
+      el.innerHTML = '<span>' + (right ? '›' : '‹').repeat(n) + '</span><em>' + (n >= 3 ? 'CURVA CERRADA' : 'CURVA') + '</em>';
+    }
+    el.hidden = false;
+  }
+  // contramano: el auto mira al revés del recorrido y se está moviendo
   const f = new THREE.Vector3(0, 0, -1).applyQuaternion(G.renderQuat); f.y = 0; f.normalize();
-  const t = target.clone().sub(G.renderPos); t.y = 0;
-  if (t.lengthSq() < 1) return;
-  t.normalize();
-  // ángulo con signo: positivo = la pista sigue hacia la derecha
-  const ang = Math.atan2(f.x * t.z - f.z * t.x, f.x * t.x + f.z * t.z);
-  let d = ang - arrowAngle; d = Math.atan2(Math.sin(d), Math.cos(d));
-  arrowAngle += d * Math.min(1, dt * 10);
-  el.hidden = false;
-  el.style.transform = `translateX(-50%) rotate(${(arrowAngle * 180 / Math.PI).toFixed(1)}deg)`;
-  // contramano: mirando para atrás y en movimiento
-  if (Math.abs(ang) > 1.9 && Math.abs(G.phys.fwdSpeed) > 250 && !G.locked) wrongT += dt; else wrongT = Math.max(0, wrongT - dt * 2);
+  const back = f.dot(now) < -0.4;
+  if (back && Math.abs(G.phys.fwdSpeed) > 250 && !G.locked) wrongT += dt; else wrongT = Math.max(0, wrongT - dt * 2);
   $('h-wrong').hidden = wrongT < 0.8;
 }
 
@@ -683,6 +833,7 @@ function frame(now) {
 
   // Remotos: interpolación suave
   for (const r of G.remotes.values()) {
+    if (!r.vis) continue; // el modelo todavía se está cargando
     if (!r.tpos) { r.vis.root.visible = false; continue; }
     r.vis.root.visible = now - r.seen < 3000;
     const pred = r.tpos.clone().addScaledVector(r.vel, Math.min(0.15, (now - r.seen) / 1000));
@@ -694,7 +845,7 @@ function frame(now) {
 
   if (driving) updateLaps(now);
   updateCamera(dt);
-  sky.position.copy(camera.position);
+  if (track) track.sky.position.copy(camera.position);
 
   // Red: enviar estado 20 veces por segundo
   netT += dt;
@@ -733,17 +884,21 @@ async function boot() {
     let mr = await fetch(BASE + 'manifest.json');
     if (!mr.ok) { BASE = ''; mr = await fetch('manifest.json'); }
     if (!mr.ok) throw new Error('falta manifest.json (subí la carpeta assets o su contenido)');
-    manifest = await mr.json();
-    await loadTrack();
+    manifest = normalizeManifest(await mr.json());
     $('loadmsg').textContent = 'Autos';
-    await Promise.all(manifest.cars.map(loadCar));
+    await Promise.all(manifest.cars.map(loadCarParams));
     if (!carDefs.has(G.carId)) G.carId = manifest.cars[0].id;
+    if (!manifest.tracks.some(t => t.id === G.trackId)) G.trackId = manifest.tracks[0].id;
+    $('loadmsg').textContent = 'Pista: ' + trackDef(G.trackId).name;
+    await setTrack(G.trackId);
+    await ensureCar(G.carId);
     $('name').value = G.name;
     renderCars();
-    spawnMyCar(0);
+    renderTrackButtons($('tracksel'));
+    await spawnMyCar(0);
     G.mode = 'menu'; show('scr-menu');
     $('loading').hidden = true;
-    window.__rv = { G, scene, camera, world, carDefs, track, renderer, progressValue, pathFraction };
+    window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar };
   } catch (e) {
     console.error(e);
     $('loadmsg').textContent = 'No se pudo cargar: ' + e.message + '. Si abriste el archivo con doble clic, tiene que estar subido a una página web (ver LEEME).';
