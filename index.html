@@ -146,6 +146,25 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
 .standings li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .standings li em { font-style: normal; font-size: 11px; color: var(--muted); letter-spacing: 1px; }
 
+/* chat rápido */
+.chat-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.chat-btns button { background: var(--ink-2); color: var(--paper); border: 2px solid var(--ink-3); border-radius: 4px; padding: 7px 4px; font-weight: 700; font-size: 13px; }
+.chat-btns button:hover { border-color: var(--volt); }
+.chat-btns button kbd { font-family: var(--body); font-size: 10px; color: var(--muted); margin-right: 4px; }
+.chat-log { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 14px; max-height: 120px; overflow-y: auto; }
+.chat-log li b, .chat-feed li b { color: var(--volt); }
+.kbd-hint { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.ready-btn[aria-pressed=true] { border-color: var(--volt); color: var(--volt); }
+.players li .ok { color: var(--volt); font-weight: 700; margin-left: 6px; }
+.chat-feed { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 52px); list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+.chat-feed li { background: rgba(18,22,43,.85); border-left: 3px solid var(--volt); padding: 4px 10px; border-radius: 3px; font-weight: 700; font-size: 15px; animation: chatin .2s ease-out; }
+.chat-feed li.old { opacity: 0; transition: opacity .6s; }
+@keyframes chatin { from { transform: translateX(-12px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .chat-feed li { animation: none; } }
+#touch-chat { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: 110px; width: min(320px, calc(100% - 32px)); background: rgba(18,22,43,.92); border: 2px solid var(--volt); border-radius: 6px; padding: 8px; z-index: 30; }
+#touch button[data-k=chat] { font-size: 24px; }
+@media (pointer: coarse) { .chat-feed { bottom: 120px; } }
+
 /* campeonato */
 .cup { display: flex; flex-direction: column; gap: 8px; border-top: 2px solid var(--ink-3); padding-top: 12px; }
 .cup-title { font-family: var(--display); font-weight: 400; color: var(--volt); margin: 0; font-size: 20px; }
@@ -271,6 +290,7 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
     <div class="field">
       <span class="label">Pilotos</span>
       <ul class="players" id="lobby-players"></ul>
+      <button type="button" class="btn ghost ready-btn" id="btn-ready" aria-pressed="false">Estoy listo</button>
     </div>
     <div class="field" id="lobby-track-field">
       <span class="label">Pista</span>
@@ -307,6 +327,11 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
     <button class="btn" id="btn-start">Empezar carrera</button>
     <p class="hint" id="lobby-wait" hidden>Esperando que el anfitrión arranque la carrera…</p>
     <button class="btn ghost" id="btn-leave">Salir de la sala</button>
+    <div class="field">
+      <span class="label">Chat rápido <small class="kbd-hint">(teclas 1 a 6)</small></span>
+      <div class="chat-btns" id="lobby-chatbtns"></div>
+      <ol class="chat-log" id="lobby-chat" aria-live="polite"></ol>
+    </div>
     <p class="status" id="lobby-status"></p>
   </div>
 </section>
@@ -346,16 +371,18 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
   <div class="center-msg" id="h-center" hidden></div>
   <div class="toast" id="h-toast" hidden></div>
   <div class="speedo"><b id="h-speed">0</b><span>KM/H</span></div>
+  <ol class="chat-feed" id="h-chat" aria-live="polite"></ol>
   <div class="weapon" id="h-weapon" hidden><i></i><div><b></b><br><small>usar con <kbd>F</kbd> o <kbd>Enter</kbd></small></div></div>
   <div class="keys">
     <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> o <kbd>WASD</kbd> manejar · <kbd>Espacio</kbd> freno de mano<br>
-    <kbd>F</kbd> usar arma · <kbd>H</kbd> bocina · <kbd>R</kbd> reaparecer · <kbd>C</kbd> cámara · <kbd>M</kbd> sonido · <kbd>+</kbd><kbd>−</kbd> sensibilidad · también joystick
+    <kbd>F</kbd> usar arma · <kbd>H</kbd> bocina · <kbd>1</kbd>–<kbd>6</kbd> frases · <kbd>R</kbd> reaparecer · <kbd>C</kbd> cámara · <kbd>M</kbd> sonido · <kbd>+</kbd><kbd>−</kbd> sensibilidad · también joystick
   </div>
 </div>
 
+<div id="touch-chat" hidden><div class="chat-btns" id="touch-chatbtns"></div></div>
 <div id="touch" hidden>
   <div class="grp"><button data-k="left" aria-label="Izquierda">◀</button><button data-k="right" aria-label="Derecha">▶</button></div>
-  <div class="grp"><button data-k="fire" aria-label="Usar arma">ARMA</button><button data-k="back" aria-label="Freno">▼</button><button data-k="gas" aria-label="Acelerar">▲</button></div>
+  <div class="grp"><button data-k="chat" aria-label="Chat rápido">💬</button><button data-k="fire" aria-label="Usar arma">ARMA</button><button data-k="back" aria-label="Freno">▼</button><button data-k="gas" aria-label="Acelerar">▲</button></div>
 </div>
 
 <script type="module" src="js/main.js"></script>

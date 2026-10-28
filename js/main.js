@@ -138,6 +138,12 @@ async function buildTrack(T) {
   // línea de carrera de los rivales de la PC (nodos de IA del juego original)
   let ai = null;
   try { const fan = parseFAN(await fetchBuf(dir + T.id + '.fan')); if (fan.length > 2) ai = new AiPath(fan); } catch (e) {}
+  if (ai) {
+    // lo que aprendieron los rivales: primero lo de este navegador, si no, el entrenamiento que viene con el juego
+    let mem = null;
+    try { mem = JSON.parse(store.get('rv.ai.' + T.id, 'null')); } catch (e) {}
+    if (ai.loadMemory && !ai.loadMemory(mem)) { try { ai.loadMemory(JSON.parse(await fetchText(dir + 'ai_memory.json'))); } catch (e) {} }
+  }
   return { id: T.id, name: T.name, inf, zones, nZones, path, ai, pickups, group: built.group, sky: skyGroup, bvh, bg, fog, far };
 }
 
@@ -302,7 +308,23 @@ class CarVisual {
     sp.scale.set(80, 20, 1); sp.position.set(0, 50, 0); sp.renderOrder = 10;
     this.nameTag = sp; this.root.add(sp);
   }
-  dispose() { this.parent.remove(this.root); }
+  // globo de diálogo arriba del auto (chat rápido)
+  say(text) {
+    if (this.bubble) { this.root.remove(this.bubble); clearTimeout(this.bubbleT); }
+    const c = document.createElement('canvas'); c.width = 320; c.height = 96;
+    const g = c.getContext('2d');
+    g.font = 'bold 40px "Chakra Petch", sans-serif';
+    const w = Math.min(300, g.measureText(text).width + 36);
+    g.fillStyle = '#fff4cc'; g.strokeStyle = '#12162b'; g.lineWidth = 5;
+    g.beginPath(); g.roundRect((320 - w) / 2, 6, w, 64, 16); g.fill(); g.stroke();
+    g.beginPath(); g.moveTo(150, 68); g.lineTo(160, 88); g.lineTo(172, 68); g.closePath(); g.fill();
+    g.fillStyle = '#12162b'; g.textAlign = 'center'; g.fillText(text, 160, 52);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, fog: false }));
+    sp.scale.set(110, 33, 1); sp.position.set(0, 82, 0); sp.renderOrder = 11;
+    this.bubble = sp; this.root.add(sp);
+    this.bubbleT = setTimeout(() => { this.root.remove(sp); if (this.bubble === sp) this.bubble = null; }, 3200);
+  }
+  dispose() { this.parent.remove(this.root); clearTimeout(this.bubbleT); }
 }
 
 // ---------- Estado del juego ----------
@@ -330,6 +352,7 @@ function show(id) {
   for (const s of ['scr-menu', 'scr-lobby', 'scr-results']) $(s).hidden = s !== id;
   $('hud').hidden = !(G.mode === 'race' || G.mode === 'practice');
   $('touch').hidden = !(isTouch && (G.mode === 'race' || G.mode === 'practice'));
+  if ($('touch').hidden) $('touch-chat').hidden = true;
 }
 const isTouch = matchMedia('(pointer: coarse)').matches;
 
@@ -548,6 +571,7 @@ async function startPractice() {
 }
 
 async function startRace(laps, grid, trackId, cup) {
+  resetReady();
   G.cup = cup && Array.isArray(cup.tracks) ? cup : null;
   audio.unlock(); clearBots(); clearGhost();
   if (trackId) await setTrack(trackId);
@@ -569,6 +593,23 @@ const botNav = {
   halfWidth: st => track.ai ? track.ai.halfWidth(st) : 300,
   room: (st, margin) => track.ai ? track.ai.room(st, margin) : [-150, 150],
   minRadius: (st, d) => track.ai ? track.ai.minRadius(st, d) : 1e5,
+  learnCrash: (st, k) => track.ai?.learnCrash(st, k),
+  // ¿se puede ir derecho de "from" a "to" sin chocar nada (con el ancho del auto) ni caer a un pozo?
+  clear: (from, to, halfW) => {
+    const d = new THREE.Vector3(to.x - from.x, 0, to.z - from.z); const len = d.length();
+    if (len < 1) return true;
+    d.divideScalar(len);
+    const side = new THREE.Vector3(-d.z, 0, d.x).multiplyScalar(halfW * 0.85);
+    for (const s of [0, 1, -1]) for (const h of [-10, 8, 32]) {
+      const o = new THREE.Vector3(from.x + side.x * s, from.y + h, from.z + side.z * s);
+      const hit = world.bvh.raycastFirst(new THREE.Ray(o, d), THREE.DoubleSide, 0, len);
+      if (hit && Math.abs(hit.face.normal.y) < (h < 0 ? 0.5 : 0.7)) return false;
+    }
+    // pozo o desnivel grande en el punto de llegada (ej.: la pileta del barco)
+    const g = world.bvh.raycastFirst(new THREE.Ray(new THREE.Vector3(to.x, Math.max(to.y, from.y) + 120, to.z), new THREE.Vector3(0, -1, 0)), THREE.DoubleSide, 0, 600);
+    if (!g || g.point.y < Math.min(to.y, from.y) - 90) return false;
+    return true;
+  },
   cars: () => G.carList || [],
   get total() { return track.ai?.total || 1; },
   // distancia a una pared (no piso ni rampa) en una dirección horizontal, o null
@@ -578,7 +619,11 @@ const botNav = {
     return h && Math.abs(h.face.normal.y) < 0.6 ? h.distance : null;
   },
 };
+function saveAiMemory() {
+  if (track?.ai?.learned) { store.set('rv.ai.' + track.id, JSON.stringify(track.ai.memory())); track.ai.learned = 0; }
+}
 function clearBots() {
+  saveAiMemory();
   for (const b of G.bots) { b.vis?.dispose(); audio.removeRemote(b.id); }
   G.bots = [];
 }
@@ -590,7 +635,7 @@ async function startBotRace() {
   // rivales con autos distintos al tuyo (al azar)
   const pool = manifest.cars.map(c => c.id).filter(id => id !== G.carId && carDefs.has(id));
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-  const ids = Array.from({ length: G.botCount }, (_, i) => pool[i % pool.length]);
+  const ids = G.botForce || Array.from({ length: G.botCount }, (_, i) => pool[i % pool.length]); // botForce: solo para pruebas
   busy('Cargando rivales…');
   try { await Promise.all(ids.map(id => ensureCar(id))); } catch (e) { busy(null); $('menu-status').textContent = 'No se pudieron cargar los rivales: ' + e.message; return; }
   busy(null);
@@ -657,6 +702,7 @@ function updateBots(now, dt) {
     b.phys.input = D.think(dt);
     if (D.lostT > 3) resetBotToPath(b);
     const lt = lapTick(L, b.phys.pos, now, D.hint);
+    if (lt != null) track.ai?.relax?.();
     if (lt != null && L.done >= G.laps) {
       L.finished = true; L.finishTime = now - G.goTime;
       addResult({ id: b.id, name: b.name, time: L.finishTime });
@@ -979,6 +1025,7 @@ function refreshLobbyUI() {
   $('btn-start').hidden = !net.isHost; $('lap-field').hidden = !net.isHost; $('lobby-wait').hidden = net.isHost;
   $('lobby-track-field').hidden = !net.isHost; $('lobby-track-name').hidden = net.isHost;
   $('cup-field').hidden = !net.isHost; updateLobbyCup();
+  renderPlayers();
   renderTrackButtons($('lobby-tracksel'));
   updateLobbyTrack();
   $('lobby-sub').textContent = net.isHost ? 'PASALE ESTE CÓDIGO A TUS AMIGOS' : 'CONECTADO A LA SALA';
@@ -1003,7 +1050,7 @@ $('btn-start').onclick = () => {
   net.send({ t: 'start', laps, grid, track: G.trackId, cup });
   startRace(laps, grid, G.trackId, cup);
 };
-$('btn-leave').onclick = () => { net?.close(); net = null; clearRemotes(); G.online = false; toMenu(); };
+$('btn-leave').onclick = () => { resetReady(); $('lobby-chat').innerHTML = ''; net?.close(); net = null; clearRemotes(); G.online = false; toMenu(); };
 $('btn-res-back').onclick = () => { if (G.online && net?.active) { G.mode = 'lobby'; refreshLobbyUI(); spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu(); };
 $('btn-quit').onclick = () => {
   if (G.online && net?.active) { G.mode = 'lobby'; weapons.clearAll(); clearGhost(); refreshLobbyUI(); spawnMyCar(lobbySlot()); show('scr-lobby'); } else toMenu();
@@ -1036,6 +1083,63 @@ async function chooseTrack(id) {
   catch (e) { $('menu-status').textContent = 'No se pudo cargar la pista: ' + e.message; }
 }
 function updateLobbyTrack() { $('lobby-track-name').textContent = 'Pista: ' + trackDef(G.trackId).name; }
+
+// ---------- Chat rápido y "Listo" ----------
+const PHRASES = ['¡Vamos!', '¡Buena!', 'Perdón', 'Jajaja', 'GG', '¡Revancha!'];
+G.ready = new Map(); G.myReady = false;
+let chatT = 0;
+function myNetId() { return net?.active ? net.myId : 'me'; }
+function nameOf(id) { if (id === myNetId()) return G.name || 'Vos'; return net?.players.get(id)?.name || G.remotes.get(id)?.name || 'Piloto'; }
+function sayPhrase(k) {
+  if (!PHRASES[k]) return;
+  const now = performance.now(); if (now - chatT < 1200) return; chatT = now;
+  net?.send({ t: 'chat', k });
+  showChat(myNetId(), k);
+}
+function showChat(id, k) {
+  const text = PHRASES[k]; if (!text) return;
+  const name = nameOf(id);
+  // en la sala: historial
+  const log = $('lobby-chat');
+  const li = document.createElement('li'); li.innerHTML = `<b>${esc(name)}:</b> ${esc(text)}`;
+  log.appendChild(li); while (log.children.length > 8) log.firstChild.remove();
+  log.scrollTop = log.scrollHeight;
+  // en la carrera: aviso abajo a la izquierda y globo arriba del auto
+  const feed = $('h-chat');
+  const f = document.createElement('li'); f.innerHTML = `<b>${esc(name)}:</b> ${esc(text)}`;
+  feed.appendChild(f); while (feed.children.length > 4) feed.firstChild.remove();
+  setTimeout(() => f.classList.add('old'), 4000); setTimeout(() => f.remove(), 4700);
+  const vis = id === myNetId() ? G.vis : G.remotes.get(id)?.vis;
+  vis?.say(text);
+  if (id !== myNetId()) audio.play('menuupdown', { vol: 0.35, rate: 1.4 });
+}
+function renderChatButtons(el, after) {
+  el.innerHTML = PHRASES.map((p, i) => `<button type="button" data-k="${i}"><kbd>${i + 1}</kbd>${esc(p)}</button>`).join('');
+  el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; sayPhrase(+b.dataset.k); after?.(); });
+}
+renderChatButtons($('lobby-chatbtns'));
+renderChatButtons($('touch-chatbtns'), () => { $('touch-chat').hidden = true; });
+$('btn-ready').onclick = () => {
+  G.myReady = !G.myReady;
+  $('btn-ready').setAttribute('aria-pressed', G.myReady);
+  $('btn-ready').textContent = G.myReady ? '✓ Listo' : 'Estoy listo';
+  G.ready.set(myNetId(), G.myReady);
+  net?.send({ t: 'ready', v: G.myReady });
+  renderPlayers();
+};
+function resetReady() {
+  G.ready.clear(); G.myReady = false;
+  $('btn-ready').setAttribute('aria-pressed', 'false'); $('btn-ready').textContent = 'Estoy listo';
+}
+// lista de pilotos de la sala (con el tilde de listo)
+function renderPlayers() {
+  const list = G.roster || [];
+  $('lobby-players').innerHTML = list.map(p => `<li><span>${esc(p.name)}${p.id === net?.myId ? ' (vos)' : ''}${p.id === 'host' ? ' ★' : ''}${G.ready.get(p.id) ? '<span class="ok" title="Listo">✓</span>' : ''}</span><span>${esc(carDefs.get(p.car)?.params.name || p.car)}</span></li>`).join('');
+  if (net?.isHost) {
+    const n = list.filter(p => G.ready.get(p.id)).length;
+    $('btn-start').textContent = list.length > 1 ? `Empezar carrera (${n}/${list.length} listos)` : 'Empezar carrera';
+  }
+}
 
 // ---------- Campeonato ----------
 const CUP_POINTS = [10, 8, 6, 5, 4, 3, 2, 1];
@@ -1128,7 +1232,9 @@ async function attachRemoteVis(id, r) {
 const netHandlers = {
   onStatus: msg => { $('lobby-status').textContent = msg; $('menu-status').textContent = msg; },
   onRoster: list => {
-    $('lobby-players').innerHTML = list.map(p => `<li><span>${esc(p.name)}${p.id === net.myId ? ' (vos)' : ''}${p.id === 'host' ? ' ★' : ''}</span><span>${esc(carDefs.get(p.car)?.params.name || p.car)}</span></li>`).join('');
+    G.roster = list;
+    renderPlayers();
+    if (G.myReady) net.send({ t: 'ready', v: true }); // para que los que recién entran lo vean
     const ids = new Set(list.map(p => p.id));
     for (const p of list) if (p.id !== net.myId) ensureRemote(p.id, p.car, p.name);
     for (const id of [...G.remotes.keys()]) if (!ids.has(id)) dropRemote(id);
@@ -1150,6 +1256,8 @@ const netHandlers = {
     else if (d.t === 'cupend') { if (d.cup) { G.cup = { ...d.cup, done: true }; if (G.mode !== 'results') { G.mode = 'results'; show('scr-results'); } renderCup(); } }
     else if (d.t === 'cupmode') { G.cupN = +d.n || 0; updateLobbyCup(); }
     else if (['pk', 'wf', 'pb', 'wb', 'gp'].includes(d.t)) weapons.onNet(d);
+    else if (d.t === 'chat') showChat(d.id, +d.k);
+    else if (d.t === 'ready') { G.ready.set(d.id, !!d.v); renderPlayers(); }
     else if (d.t === 'honk') { const r = G.remotes.get(d.id); if (r?.vis) audio.playAt('honka', r.pos, { vol: 0.9 }); }
     else if (d.t === 'rank') { if (Array.isArray(d.order)) G.rank = { order: d.order.map(String), at: performance.now() }; }
     else if (d.t === 'track') {
@@ -1186,6 +1294,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyC') G.camMode = (G.camMode + 1) % 3;
   if (['KeyF', 'KeyE', 'Enter', 'NumpadEnter'].includes(e.code) && !e.repeat && (G.mode === 'race' || G.mode === 'practice')) { e.preventDefault(); weapons.fire(); }
   if (G.mode === 'menu' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight') && !e.repeat) stepCar(e.code === 'ArrowLeft' ? -1 : 1);
+  if (/^Digit[1-6]$/.test(e.code) && !e.repeat && G.mode !== 'menu' && G.mode !== 'loading') sayPhrase(+e.code.slice(5) - 1);
   if (e.code === 'KeyH' && (G.mode === 'race' || G.mode === 'practice' || G.mode === 'lobby')) honk();
   if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Sonido apagado' : 'Sonido encendido');
   if (e.code === 'Equal' || e.code === 'NumpadAdd') setSteerSens(G.steerSens + 10, true);
@@ -1197,7 +1306,11 @@ window.addEventListener('blur', () => keys.clear());
 const touchState = { left: false, right: false, gas: false, back: false };
 document.querySelectorAll('#touch button').forEach(b => {
   const k = b.dataset.k;
-  const on = e => { e.preventDefault(); touchState[k] = true; b.classList.add('on'); if (k === 'fire') weapons.fire(); };
+  const on = e => {
+    e.preventDefault();
+    if (k === 'chat') { $('touch-chat').hidden = !$('touch-chat').hidden; return; }
+    touchState[k] = true; b.classList.add('on'); if (k === 'fire') weapons.fire();
+  };
   const off = e => { e.preventDefault(); touchState[k] = false; b.classList.remove('on'); };
   b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('pointerleave', off);
 });
@@ -1626,9 +1739,10 @@ async function boot() {
         now += 1000 / 60;
         updateBots(now, FIXED);
         world.bvh.update?.(FIXED);
-        for (const b of G.bots) { const v0 = b.phys.fwdSpeed; b.phys.step(FIXED); if (b.phys.impact > 450 && b.phys.impactWall) { b.crashes = (b.crashes || 0) + 1; if (log) (log.crash ??= []).push([b.name.slice(0, 8), Math.round(b.phys.pos.x), Math.round(b.phys.pos.z), Math.round(v0), Math.round(b.phys.impact), b.driver.lastWant | 0]); } }
+        for (const b of G.bots) { const v0 = b.phys.fwdSpeed; b.phys.step(FIXED); if (b.phys.impact > 450 && b.phys.impactWall) { b.crashes = (b.crashes || 0) + 1; if (log) (log.crash ??= []).push([b.name.slice(0, 8), Math.round(b.phys.pos.x), Math.round(b.phys.pos.z), Math.round(v0), Math.round(b.phys.impact), b.driver.lastWant | 0, Math.round(b.phys.fwdSpeed), Math.round(b.phys.impactPt.y - b.phys.pos.y)]); } }
         botCollisions();
         weapons.update(FIXED, now);
+        if (log?.dbg && i % 6 === 0) for (const b of G.bots) log.dbg.push({ ...b.driver.dbg, x: Math.round(b.phys.pos.x), z: Math.round(b.phys.pos.z) });
         if (log?.trace && i % 3 === 0) for (const b of G.bots) log.trace.push([b.phys.pos.x, b.phys.pos.y, b.phys.pos.z]);
         if (log && i % 30 === 0) log.push(G.bots.map(b => [Math.round(b.phys.pos.x), Math.round(b.phys.pos.z), Math.round(b.phys.fwdSpeed), b.lap.cur, b.lap.done]));
       }

@@ -10,6 +10,8 @@ export const DIFFICULTY = {
   dificil: { name: 'Difícil', skill: 0.97, spread: 0.04 },
 };
 
+const TUNE_R = 350; // distancia para medir el radio de las curvas
+
 // Recorrido de IA (nodos .fan): línea de carrera con los bordes de la pista y bifurcaciones
 export class AiPath {
   constructor(fan) {
@@ -22,11 +24,24 @@ export class AiPath {
       return { a, b, p: a.clone().lerp(b, line), w, lineOff: (line - 0.5) * w, next: n.next, prev: n.prev, dist: n.dist, prio: n.priority };
     });
     this.total = Math.max(1, ...this.nodes.map(n => n.dist));
+    // "memoria" de la pista: cuánto hay que aflojar en cada nodo (1 = nada). Se aprende con los choques.
+    this.slow = new Float32Array(this.nodes.length).fill(1);
+    this.learned = 0;
     // radio de la curva en cada nodo (con el anterior y el siguiente), para saber a qué velocidad se puede pasar
     const N = this.nodes;
-    const raw = N.map(n => {
+    // puntos a ~350 unidades para atrás y para adelante (con nodos muy juntos los vecinos inmediatos dan curvas falsas)
+    const walk = (i, dir, dist) => {
+      let j = i, d = 0;
+      for (let g = 0; g < 30 && d < dist; g++) {
+        const nx = dir > 0 ? N[j].next[0] : N[j].prev[0];
+        if (nx == null) break;
+        d += N[j].p.distanceTo(N[nx].p); j = nx;
+      }
+      return j;
+    };
+    const raw = N.map((n, i) => {
       if (!n.prev.length || !n.next.length) return 1e5;
-      const a = N[n.prev[0]].p, b = n.p, c = N[n.next[0]].p;
+      const a = N[walk(i, -1, TUNE_R)].p, b = n.p, c = N[walk(i, 1, TUNE_R)].p;
       const ab = Math.hypot(b.x - a.x, b.z - a.z), bc = Math.hypot(c.x - b.x, c.z - b.z), ca = Math.hypot(a.x - c.x, a.z - c.z);
       const area2 = Math.abs((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x));
       return area2 < 1e-3 ? 1e5 : Math.min(1e5, (ab * bc * ca) / (2 * area2));
@@ -38,6 +53,24 @@ export class AiPath {
       n.R = Math.min(raw[i] * 1.6, avg);
     });
   }
+  // un rival chocó en este tramo: la próxima vez se entra más despacio (la memoria la comparten todos)
+  learnCrash(st, strength = 1) {
+    if (st.from == null) return;
+    const N = this.nodes, mark = new Set([st.from, st.to]);
+    let f = [st.from]; for (let k = 0; k < 2; k++) { const nf = []; for (const i of f) for (const j of N[i].prev) { mark.add(j); nf.push(j); } f = nf; }
+    f = [st.to]; for (let k = 0; k < 2; k++) { const nf = []; for (const i of f) for (const j of N[i].next) { mark.add(j); nf.push(j); } f = nf; }
+    for (const j of mark) this.slow[j] = Math.max(0.5, this.slow[j] * (1 - 0.08 * strength));
+    this.learned++;
+  }
+  // memoria guardada (array de números por nodo)
+  loadMemory(arr) {
+    if (!Array.isArray(arr) || arr.length !== this.slow.length) return false;
+    arr.forEach((v, i) => { this.slow[i] = Math.max(0.5, Math.min(1, +v || 1)); });
+    return true;
+  }
+  // con cada vuelta sin problemas se va recuperando un poquito la confianza (para no quedar lentos para siempre)
+  relax(k = 0.004) { for (let i = 0; i < this.slow.length; i++) this.slow[i] = Math.min(1, this.slow[i] + k); }
+  memory() { return Array.from(this.slow, v => Math.round(v * 1000) / 1000); }
   halfWidth(st) { return st.from == null ? 300 : this.nodes[st.from].w / 2; }
   // cuánto se puede correr el auto a cada lado de la línea sin salirse de la pista (margen = medio auto + un poco)
   room(st, margin) {
@@ -66,7 +99,7 @@ export class AiPath {
     let d = N[a].p.distanceTo(N[b].p) * (1 - st.t);
     let lim = Infinity;
     for (let guard = 0; guard < 40 && d < maxLook; guard++) {
-      const vn = Math.sqrt(alat * N[b].R);
+      const vn = Math.sqrt(alat * N[b].R) * this.slow[b];
       lim = Math.min(lim, Math.sqrt(vn * vn + 2 * decel * d));
       a = b; b = this.nextOf(b, st); if (b == null) break;
       d += N[a].p.distanceTo(N[b].p);
@@ -153,7 +186,7 @@ export class AiPath {
 }
 
 // ajustes de manejo (se pueden tocar desde la consola para probar)
-export const TUNE = { lat: 0.8, brake: 1700, cross: 0.4, look: 0.32, steer: 1.0, damp: 1.0, tight: 0.9, wall: 1.4, pass: 0.45 };
+export const TUNE = { lat: 0.8, brake: 1700, cross: 0.4, look: 0.32, steer: 1.0, damp: 1.0, tight: 0.9, planStep: 70, crossAt: 0.8, wall: 1.4, pass: 0.45 };
 
 export class BotDriver {
   // nav: { ahead(pos, dist, hint) -> Vector3|null, dirAt(pos, dist, hint) -> Vector3|null, locate(pos, hint) }
@@ -167,7 +200,7 @@ export class BotDriver {
     this.offT = 0;
     this.stuckT = 0; this.revT = 0; this.lostT = 0; this.revSteer = 0;
     this.straight = true;
-    this.passOff = 0; this.passT = 0;
+    this.passOff = 0; this.passT = 0; this.planOff = 0; this.learnT = 0;
     const ws = phys.p.wheels.filter(w => w.present);
     this.grip = ws.reduce((a, w) => a + (w.staticFriction || 1.5), 0) / Math.max(1, ws.length);
     this.halfCar = Math.max(25, ...ws.map(w => Math.abs(w.offset1[0]) + w.radius * 0.5));
@@ -182,6 +215,11 @@ export class BotDriver {
     const spd = P.fwdSpeed;
     const inp = { throttle: 0, steer: 0, handbrake: false };
     nav.locate(pos, this.st);
+    // aprender de los choques fuertes contra paredes (no de los roces ni de los aterrizajes)
+    if ((this.learnT -= dt) <= 0 && P.impact > 500 && P.impactWall && this.revT <= 0) {
+      this.learnT = 0.6;
+      nav.learnCrash?.(this.st, Math.min(1.5, P.impact / 1200));
+    }
     const dirNow = nav.dirAt(this.st, 0);
     if (!dirNow) return inp;
     // vigilante: si en 7 segundos no avanzó por el recorrido (da vueltas en un lugar), se lo devuelve a la pista
@@ -220,14 +258,24 @@ export class BotDriver {
     }
     const [lo, hi] = nav.room ? nav.room(this.st, this.halfCar + 35) : [-half + 70, half - 70];
     const off = Math.max(Math.min(0, lo), Math.min(Math.max(0, hi), this.passT > 0 ? this.passOff : this.offset));
-    let tgt = null;
-    for (const k of [1, 0.6, 0.35, 0.2]) {
-      const t = nav.ahead(this.st, look * k);
-      if (!t) break;
-      t.x += -dirNow.z * off * k; t.z += dirNow.x * off * k;
-      tgt = t;
-      const d = _t.copy(t).sub(pos); d.y = 0; const len = d.length();
-      if (len < 1 || !nav.wall(pos, d.divideScalar(len), len)) break;
+    // planificador corto: se prueban varias líneas a lo ancho de la pista y se elige la más cercana
+    // a la ideal que no choque nada (con el ancho del auto) ni caiga a un pozo. Si ninguna está libre,
+    // se mira más cerca.
+    let tgt = null, blocked = true;
+    const cands = [];
+    for (const k of [0, -1, 1, -2, 2, -3, 3, -4, 4]) cands.push(Math.max(lo, Math.min(hi, off + k * TUNE.planStep)));
+    const uniq = [...new Set(cands.map(c => Math.round(c)))];
+    uniq.sort((a, b) => (Math.abs(a - off) + 0.6 * Math.abs(a - this.planOff)) - (Math.abs(b - off) + 0.6 * Math.abs(b - this.planOff)));
+    outer:
+    for (const k of [1, 0.6, 0.35]) {
+      const base = nav.ahead(this.st, look * k);
+      if (!base) break;
+      const dir = nav.dirAt(this.st, look * k) || dirNow;
+      for (const c of (nav.clear ? uniq : [off])) {
+        const t = base.clone(); t.x += -dir.z * c; t.z += dir.x * c;
+        if (!tgt) tgt = t;
+        if (!nav.clear || nav.clear(pos, t, this.halfCar)) { tgt = t; blocked = false; this.planOff += (c - this.planOff) * 0.5; break outer; }
+      }
     }
     if (!tgt) return inp;
     const fwd = _f.set(0, 0, -1).applyQuaternion(P.quat); fwd.y = 0; fwd.normalize();
@@ -260,11 +308,12 @@ export class BotDriver {
     const k = this.skill * this.band;
     const alat = this.grip * 2200 * TUNE.lat * k * k;
     const lim = nav.speedLimit ? nav.speedLimit(this.st, alat, TUNE.brake * k, Math.max(1200, spd * spd / (2 * TUNE.brake) + 600)) : Infinity;
-    let want = Math.min(top * k, lim, follow);
+    let want = Math.min(top * k, lim, follow, TUNE.cap || Infinity);
     this.straight = lim > top * 0.95;
-    want *= 1 - TUNE.cross * Math.min(1, Math.max(0, Math.abs(ang) - 0.35)); // muy cruzado: más despacio
+    want *= 1 - TUNE.cross * Math.min(1, Math.max(0, Math.abs(ang) - TUNE.crossAt)); // muy cruzado (no en una curva normal): más despacio
+    if (blocked) want = Math.min(want, 900); // no ve un camino libre: más despacio
     want = Math.max(want, 450);
-    this.lastWant = want;
+    this.lastWant = want; this.dbg = { lim: Math.round(lim), top: Math.round(top * k), blocked, spd: Math.round(spd), ang: +ang.toFixed(2), rev: this.revT > 0 };
     if (spd < want - 40) inp.throttle = 1;
     else if (spd > want * 1.15) inp.throttle = -1;
     else if (spd > want + 60) inp.throttle = -0.4;

@@ -75,6 +75,15 @@ MINIMAPA, RÉCORDS Y FANTASMA
   transparente que repite esa vuelta, para que veas dónde ganás o perdés.
 
 
+CHAT RÁPIDO Y "LISTO"
+---------------------
+En la sala y en la carrera se pueden mandar frases con las teclas 1 a 6 (o
+los botones de la sala). Aparecen en un globo arriba del auto de quien la
+mandó y abajo a la izquierda. En la sala, "Estoy listo" pone un tilde al
+lado de tu nombre; el anfitrión ve cuántos están listos en el botón de
+empezar.
+
+
 CAMPEONATO ONLINE
 -----------------
 En la sala, el anfitrión elige "Modo": Una carrera, Copa de 3, Copa de 4 o
@@ -105,6 +114,8 @@ Flechas o WASD ........ manejar
 Espacio ............... freno de mano
 F o Enter ............. usar el arma que agarraste
 H ..................... bocina (tus amigos la escuchan)
+1 a 6 ................. chat rápido: ¡Vamos!, ¡Buena!, Perdón, Jajaja, GG,
+                        ¡Revancha! (en el celular, el botón 💬)
 R ..................... reaparecer (si quedás trabado o dado vuelta)
 C ..................... cambiar cámara (cerca / lejos / paragolpes)
 M ..................... prender o apagar el sonido
