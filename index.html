@@ -235,8 +235,9 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
     <!-- CARRERA CONTRA LA PC -->
     <div class="page" id="pg-race" data-page="race" hidden>
       <header class="pg-head"><button type="button" class="back" data-back aria-label="Volver">◀</button><h2>Carrera</h2><span>Contra la computadora</span></header>
+      <ol class="steps" hidden></ol>
       <div class="pg-body">
-        <div class="field"><span class="label">Pista</span><div class="slot-track"></div></div>
+        <button type="button" class="track-sum" data-go="tracks"><img alt=""><span class="ts-txt"><span>Pista</span><b class="sum-track"></b><em class="sum-track-info"></em></span><span class="chip">Cambiar</span></button>
         <div class="field">
           <span class="label">Reglas</span>
           <div class="botopts">
@@ -253,8 +254,9 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
     <!-- PRÁCTICA -->
     <div class="page" id="pg-practice" data-page="practice" hidden>
       <header class="pg-head"><button type="button" class="back" data-back aria-label="Volver">◀</button><h2>Práctica</h2><span>Sin rivales ni límite de vueltas</span></header>
+      <ol class="steps" hidden></ol>
       <div class="pg-body">
-        <div class="field"><span class="label">Pista</span><div class="slot-track"></div></div>
+        <button type="button" class="track-sum" data-go="tracks"><img alt=""><span class="ts-txt"><span>Pista</span><b class="sum-track"></b><em class="sum-track-info"></em></span><span class="chip">Cambiar</span></button>
         <p class="hint">Tu mejor vuelta queda guardada como récord de la pista y la próxima vez corrés contra su fantasma.</p>
         <div class="car-sum"><span>Tu auto</span><b class="sum-car"></b><button type="button" class="chip" data-go="garage">Cambiar</button></div>
       </div>
@@ -285,23 +287,32 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
     <!-- GARAGE -->
     <div class="page page-garage" id="pg-garage" data-page="garage" hidden>
       <header class="pg-head"><button type="button" class="back" data-back aria-label="Volver">◀</button><h2>Garage</h2><span id="garage-count"></span></header>
+      <ol class="steps" hidden></ol>
       <div class="pg-body">
       <div class="garage" id="garage">
         <div class="g-tabs" id="g-tabs" role="tablist" aria-label="Grupos de autos"></div>
-        <div class="g-main">
-          <button type="button" class="g-arrow" id="g-prev" aria-label="Auto anterior">‹</button>
-          <div class="g-card">
-            <div class="g-shot"><img id="g-shot" alt=""></div>
-            <div class="g-name" id="g-name"></div>
-            <div class="g-sub" id="g-sub"></div>
-          </div>
-          <button type="button" class="g-arrow" id="g-next" aria-label="Auto siguiente">›</button>
-        </div>
-        <dl class="g-stats" id="g-stats"></dl>
+        <div class="g-shot" hidden><img id="g-shot" alt=""></div>
+        <section class="spec" aria-labelledby="spec-title">
+          <h3 id="spec-title"><span>Ficha técnica</span><small>comparado con los demás autos</small></h3>
+          <dl class="g-stats" id="g-stats"></dl>
+        </section>
         <div class="g-strip" id="g-strip" role="listbox" aria-label="Autos del grupo"></div>
       </div>
       </div>
-      <footer class="pg-foot"><button type="button" class="btn big" data-back data-default>Listo</button></footer>
+      <footer class="pg-foot"><button type="button" class="btn big" id="g-choose" data-default>Elegir</button></footer>
+    </div>
+
+    <!-- PISTAS -->
+    <div class="page page-tracks" id="pg-tracks" data-page="tracks" hidden>
+      <header class="pg-head"><button type="button" class="back" data-back aria-label="Volver">◀</button><h2>Pistas</h2><span id="tracks-count"></span></header>
+      <ol class="steps" hidden></ol>
+      <div class="pg-body">
+        <div id="track-pick" class="track-pick">
+          <div class="tracksel" id="tracksel"></div>
+          <p class="hint" id="track-rec" hidden></p>
+        </div>
+      </div>
+      <footer class="pg-foot"><button type="button" class="btn big" id="t-choose" data-default>Elegir</button></footer>
     </div>
 
     <!-- OPCIONES -->
@@ -370,13 +381,24 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
   </div>
   <div class="navhint" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> elegir</span><span><kbd>Enter</kbd> aceptar</span><span><kbd>Esc</kbd> volver</span><span class="pad">Joystick: <kbd>A</kbd> aceptar <kbd>B</kbd> volver</span></div>
   <div class="sel-chip" id="sel-chip" aria-live="polite"></div>
+  <!-- Garage: el auto 3D de la escena es el protagonista; acá solo el nombre y las flechas -->
+  <div class="g-hero" id="g-hero" hidden>
+    <button type="button" class="g-arrow" id="g-prev" aria-label="Auto anterior">◀</button>
+    <div class="g-plate"><div class="g-sub" id="g-sub"></div><div class="g-name" id="g-name"></div><div class="g-tags" id="g-tags"></div></div>
+    <button type="button" class="g-arrow" id="g-next" aria-label="Auto siguiente">▶</button>
+  </div>
+  <!-- Pistas: silueta grande y datos de la pista que estás mirando -->
+  <div class="t-hero" id="t-hero" hidden aria-live="polite">
+    <div class="t-map"><img id="t-map" alt=""></div>
+    <div class="t-card">
+      <div class="t-state" id="t-state"></div>
+      <h3 id="t-name"></h3>
+      <dl class="t-data" id="t-data"></dl>
+    </div>
+  </div>
 </section>
 
-<!-- Selector de pista compartido (se mueve entre Carrera y Práctica) -->
-<div id="track-pick" class="track-pick" hidden>
-  <div class="tracksel" id="tracksel"></div>
-  <p class="hint" id="track-rec"></p>
-</div>
+
 
 <!-- SALA -->
 <section class="screen" id="scr-lobby" hidden>

@@ -187,3 +187,119 @@ body.kbd-nav .screen button:focus:not(.mm-item), body.kbd-nav .overlay button:fo
   .mm-item, .btn, .back, .chip, .lapsel button, .tracksel button { transition: none; }
   .ld-bar i { animation: none; width: 100%; }
 }
+
+/* =====================================================================
+   FASE 2: garage protagonista, ficha técnica y selección de pistas
+   ===================================================================== */
+:root { --free-l: calc(min(500px, 100%) - 24px); }
+
+/* pasos del recorrido: AUTO › PISTA › REGLAS */
+.steps { list-style: none; display: flex; gap: 6px; margin: -4px 0 0; padding: 0; counter-reset: s; }
+.steps li { flex: 1; min-width: 0; }
+.steps button { width: 100%; display: flex; align-items: center; gap: 7px; justify-content: center; transform: skewX(-10deg); background: var(--ink-2); color: var(--muted); border: 2px solid var(--ink-3); border-radius: 2px; padding: 5px 6px; font-weight: 700; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; white-space: nowrap; transition: border-color var(--t-fast), color var(--t-fast); }
+.steps button > * , .steps button { }
+.steps em { font-style: normal; font-family: var(--display); font-size: 13px; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--ink-3); color: var(--paper); transform: skewX(10deg); }
+.steps li.done button { color: var(--paper); }
+.steps li.done em { background: var(--good); color: var(--ink); }
+.steps li.cur button { background: var(--volt); color: var(--ink); border-color: var(--volt); }
+.steps li.cur em { background: var(--ink); color: var(--volt); }
+.steps button:hover, .steps button:focus-visible { border-color: var(--volt); outline: none; }
+
+/* ---------- Garage ---------- */
+.page-garage .g-tabs button { border-bottom-width: 4px; transition: color var(--t-fast), border-color var(--t-fast); }
+.spec { display: flex; flex-direction: column; gap: 10px; background: var(--ink-2); border: 3px solid var(--ink-3); border-radius: 4px; padding: 12px 12px 14px; position: relative; }
+.spec::before { content: ''; position: absolute; left: -3px; top: -3px; bottom: -3px; width: 6px; background: var(--volt); }
+.spec h3 { margin: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-family: var(--display); font-weight: 400; color: var(--volt); font-size: 16px; text-transform: uppercase; }
+.spec h3 small { font-family: var(--body); font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; font-weight: 700; }
+.g-stats { grid-template-columns: 96px 1fr 64px; gap: 9px 10px; }
+.g-stats dt { font-size: 11px; }
+.blk { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; height: 14px; }
+.blk i { display: block; background: var(--ink-3); transform: skewX(-14deg); border-radius: 1px; }
+.blk i.on { background: var(--volt); animation: blkIn .22s ease-out backwards; animation-delay: calc(var(--k) * 22ms); }
+.blk i.on:nth-child(n+9) { background: var(--coral); }
+@keyframes blkIn { from { opacity: 0; transform: skewX(-14deg) scaleY(.2); } }
+.g-stats dd.v { font-size: 12px; }
+.page-garage .g-strip button { transition: border-color var(--t-fast), transform var(--t-fast); }
+.page-garage .g-strip button:hover { border-color: var(--volt); transform: translateY(-2px); }
+
+/* nombre del auto y flechas sobre la escena 3D */
+.g-hero { position: absolute; left: var(--free-l); right: max(18px, env(safe-area-inset-right, 0px)); bottom: 54px; display: flex; align-items: center; justify-content: center; gap: 16px; pointer-events: none; }
+.g-hero .g-arrow { pointer-events: auto; width: 62px; height: 62px; min-height: 0; flex: none; display: grid; place-items: center; font-family: var(--body); font-size: 24px; background: var(--ink); color: var(--volt); border: 3px solid var(--volt); border-radius: 4px; transform: skewX(-10deg); box-shadow: 5px 5px 0 rgba(0,0,0,.45); transition: transform var(--t-fast), background-color var(--t-fast), color var(--t-fast); }
+.g-hero .g-arrow:hover, .g-hero .g-arrow:focus-visible { background: var(--volt); color: var(--ink); outline: none; transform: skewX(-10deg) scale(1.06); }
+.g-hero .g-arrow:active { transform: skewX(-10deg) scale(.95); }
+.g-plate { pointer-events: auto; min-width: min(420px, 60vw); max-width: 560px; background: var(--ink); border-top: 6px solid var(--volt); box-shadow: 0 6px 0 var(--coral), 6px 12px 0 rgba(0,0,0,.35); padding: 10px 22px 12px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.g-plate .g-sub { display: flex; gap: 12px; align-items: baseline; justify-content: center; letter-spacing: 2px; text-transform: uppercase; font-weight: 700; font-size: 12px; color: var(--muted); }
+.g-plate .g-sub b { font-family: var(--display); font-weight: 400; color: var(--paper); font-size: 15px; letter-spacing: 1px; }
+.g-plate .g-sub b small { color: var(--muted); font-size: 11px; }
+.g-plate .g-name { font-size: clamp(28px, 4.2vw, 46px); line-height: 1; text-shadow: 3px 3px 0 var(--coral); text-transform: uppercase; }
+.g-plate .g-name.swap { animation: nameIn .22s ease-out; }
+@keyframes nameIn { from { opacity: 0; transform: translateY(10px) scale(.96); } }
+.g-tags { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-top: 2px; }
+.g-tags span { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--ink); background: var(--paper); border-radius: 2px; padding: 2px 8px; text-transform: uppercase; }
+.g-tags span:last-child { background: var(--volt); }
+
+/* ---------- Selección de pistas ---------- */
+.page-tracks .tracksel { grid-template-columns: 1fr 1fr; gap: 8px; }
+.page-tracks .tracksel button { display: grid; grid-template-columns: 1fr; gap: 3px; padding: 6px 6px 7px; text-align: left; background: var(--ink-2); border: 3px solid var(--ink-3); border-radius: 3px; color: var(--paper); }
+.page-tracks .tracksel button b { font-size: 13px; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-map { display: block; aspect-ratio: 4 / 3; background: var(--ink); border-radius: 2px; overflow: hidden; }
+.tc-map img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform var(--t-mid); }
+.page-tracks .tracksel button:hover .tc-map img, .page-tracks .tracksel button:focus-visible .tc-map img { transform: scale(1.05); }
+.tc-map img:not([src]) { visibility: hidden; }
+.tc-stars { font-style: normal; font-size: 11px; color: var(--volt); letter-spacing: 1px; min-height: 1em; }
+.page-tracks .tracksel button:hover, .page-tracks .tracksel button:focus-visible { border-color: var(--paper); outline: none; transform: translateY(-2px); }
+.page-tracks .tracksel button[aria-pressed=true] { border-color: var(--volt); background: var(--ink-3); color: var(--volt); box-shadow: 4px 4px 0 var(--coral); }
+.page-tracks .tracksel button:not([aria-pressed=true]) .tc-map img { opacity: .82; }
+.page-tracks .tracksel button[aria-pressed=true] b::before { content: '✓ '; }
+
+/* silueta grande y datos sobre la escena */
+.t-hero { position: absolute; left: var(--free-l); right: max(18px, env(safe-area-inset-right, 0px)); top: max(16px, env(safe-area-inset-top, 0px)); bottom: 50px; display: grid; grid-template-rows: minmax(0, 1fr) auto; justify-items: center; align-items: end; gap: 14px; pointer-events: none; }
+.t-hero.swap { animation: fadeIn .2s ease-out; }
+.t-map { height: 100%; max-height: 430px; max-width: 100%; aspect-ratio: 4 / 3; background: var(--ink); border: 4px solid var(--paper); box-shadow: 8px 8px 0 rgba(0,0,0,.45); transform: rotate(-1.5deg); overflow: hidden; }
+.t-map img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.t-map img:not([src]) { visibility: hidden; }
+.t-card { width: min(600px, 100%); background: var(--ink); border-top: 6px solid var(--volt); box-shadow: 0 6px 0 var(--coral); padding: 10px 18px 14px; display: flex; flex-direction: column; gap: 6px; }
+.t-state { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+.t-state.on { color: var(--good); }
+.t-state.on::before { content: '✓ '; }
+.t-card h3 { margin: 0; font-family: var(--display); font-weight: 400; color: var(--volt); font-size: clamp(24px, 3.4vw, 38px); line-height: 1; text-shadow: 3px 3px 0 var(--coral); text-transform: uppercase; }
+.t-data { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px 14px; margin: 4px 0 0; }
+.t-data dt { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+.t-data dd { margin: 2px 0 0; font-weight: 700; font-size: 15px; }
+.t-data dd small { display: block; font-size: 11px; color: var(--muted); font-weight: 600; }
+.t-data .stars { color: var(--volt); letter-spacing: 1px; }
+.t-data .na { color: var(--muted); font-weight: 600; font-size: 13px; }
+
+/* resumen de la pista elegida (carrera y práctica) */
+.track-sum { display: grid; grid-template-columns: 96px 1fr auto; gap: 12px; align-items: center; text-align: left; background: var(--ink-2); border: 3px solid var(--ink-3); border-left: 6px solid var(--volt); border-radius: 3px; padding: 6px 10px 6px 6px; color: var(--paper); transition: border-color var(--t-fast), transform var(--t-fast); }
+.track-sum img { width: 96px; height: 72px; object-fit: cover; background: var(--ink); border-radius: 2px; }
+.track-sum img:not([src]) { visibility: hidden; }
+.track-sum .ts-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.track-sum .ts-txt > span { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+.track-sum b { font-family: var(--display); font-weight: 400; color: var(--volt); font-size: 17px; line-height: 1.05; overflow-wrap: anywhere; }
+.track-sum em { font-style: normal; font-size: 12px; color: var(--muted); font-weight: 700; }
+.track-sum:hover, .track-sum:focus-visible { border-color: var(--volt); outline: none; transform: translateX(3px); }
+
+/* tablet chica / celular: el panel abajo y lo de la escena arriba */
+@media (max-width: 640px) {
+  .page-garage, .page-tracks { }
+  #scr-menu:has(#pg-garage:not([hidden])) .band, #scr-menu:has(#pg-tracks:not([hidden])) .band { max-height: 60%; }
+  .g-hero { left: 10px; right: 10px; top: max(14px, env(safe-area-inset-top, 0px)); bottom: auto; gap: 8px; }
+  .g-hero .g-arrow { width: 44px; height: 44px; font-size: 18px; }
+  .g-plate { min-width: 0; flex: 1; padding: 8px 10px; }
+  .g-plate .g-name { font-size: 24px; }
+  .t-hero { left: 10px; right: 10px; top: max(10px, env(safe-area-inset-top, 0px)); bottom: auto; height: 38%; grid-template-rows: minmax(0, 1fr); grid-template-columns: auto 1fr; align-items: center; justify-items: start; }
+  .t-map { height: auto; width: 44vw; max-height: none; transform: none; border-width: 3px; }
+  .t-hero { height: auto; gap: 8px; }
+  .t-card { padding: 8px 10px; }
+  .t-data { grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+  .t-data dd { font-size: 13px; }
+  .steps button { font-size: 10px; letter-spacing: .5px; padding: 4px; }
+}
+@media (max-height: 640px) and (min-width: 641px) {
+  .t-data { grid-template-columns: repeat(5, 1fr); }
+  .g-hero { bottom: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .blk i.on, .g-plate .g-name.swap, .t-hero.swap { animation: none; }
+}

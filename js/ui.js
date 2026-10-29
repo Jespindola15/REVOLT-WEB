@@ -11,8 +11,14 @@ export function initUI(api) {
   const body = document.body;
   const menu = $('scr-menu'), pause = $('pause');
   const pages = [...menu.querySelectorAll('.page')];
-  const trackPick = $('track-pick'), optBody = $('opt-body');
+  const optBody = $('opt-body');
   let page = 'home', stack = [], lastHome = null;
+  // Recorrido para armar la carrera: AUTO → PISTA → REGLAS (o salida, en la práctica). null = página suelta
+  let flow = null;
+  const FLOWS = {
+    race: [['garage', 'Auto'], ['tracks', 'Pista'], ['race', 'Reglas']],
+    practice: [['garage', 'Auto'], ['tracks', 'Pista'], ['practice', 'Salida']],
+  };
 
   const sfx = (name, o = {}) => { try { api.audio.play(name, o); } catch (e) {} };
   const visible = el => !!el && !el.disabled && el.getClientRects().length > 0 && !el.closest('[hidden]');
@@ -26,20 +32,43 @@ export function initUI(api) {
     page = p;
     for (const el of pages) el.hidden = el.dataset.page !== p;
     const cur = pageEl();
-    // el selector de pista y las opciones son uno solo: se mudan a la página que se abre
-    const slot = cur.querySelector('.slot-track');
-    if (slot) { slot.appendChild(trackPick); trackPick.hidden = false; }
+    // las opciones son una sola: se mudan a la página que se abre (menú o pausa)
     const os = cur.querySelector('.opt-slot');
     if (os && !os.contains(optBody)) os.appendChild(optBody);
     if (p === 'options') syncOptions();
-    if (p === 'garage') requestAnimationFrame(() => $('g-strip').querySelector('[aria-selected=true]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+    if (p === 'home') flow = null;
+    if (p === 'garage') requestAnimationFrame(() => { const st = $('g-strip'), sel = st.querySelector('[aria-selected=true]'); if (sel) st.scrollLeft = Math.max(0, sel.offsetLeft - (st.clientWidth - sel.offsetWidth) / 2); });
+    renderSteps(cur);
     refreshSummary();
+    if (p === 'tracks') openTracks();
+    layoutScene();
     if (sound) sfx(back || p === 'home' ? 'menuupdown' : 'menunext', { vol: 0.55, rate: back || p === 'home' ? 0.85 : 1 });
-    focusDefault(cur, p === 'home' ? lastHome : null);
+    focusDefault(cur, p === 'home' ? lastHome : p === 'tracks' ? $('tracksel').querySelector('[aria-pressed=true]') : null);
   }
   function goBack() {
     const prev = stack.pop() || 'home';
     goPage(prev, { back: true });
+  }
+  // ir a un paso del recorrido (si ya pasaste por ahí, es como volver)
+  function goStep(p) {
+    const i = stack.lastIndexOf(p);
+    if (i >= 0) { stack = stack.slice(0, i); goPage(p, { back: true }); } else goPage(p);
+  }
+  // botón grande del garage y de las pistas: en el recorrido, "siguiente"; si no, elegir y volver
+  function flowNext(from) {
+    const f = flow && FLOWS[flow], i = f ? f.findIndex(x => x[0] === from) : -1;
+    if (f && f[i + 1]) goStep(f[i + 1][0]); else goBack();
+  }
+  function renderSteps(cur) {
+    // textos de los botones grandes según el paso
+    $('g-choose').textContent = flow ? 'Siguiente: pista ▶' : 'Elegir';
+    $('t-choose').textContent = flow === 'race' ? 'Siguiente: reglas ▶' : flow === 'practice' ? 'Siguiente ▶' : 'Elegir';
+    const ol = cur.querySelector('.steps'); if (!ol) return;
+    const f = flow && FLOWS[flow];
+    const i = f ? f.findIndex(x => x[0] === page) : -1;
+    ol.hidden = i < 0;
+    if (i < 0) return;
+    ol.innerHTML = f.map(([p, label], k) => `<li class="${k < i ? 'done' : k === i ? 'cur' : ''}"><button type="button" data-step="${p}" ${k === i ? 'aria-current="step"' : ''}><em>${k + 1}</em>${label}</button></li>`).join('');
   }
 
   // ---------- Foco ----------
@@ -230,10 +259,23 @@ export function initUI(api) {
 
   // ---------- Mouse / toque ----------
   menu.addEventListener('click', e => {
+    const st = e.target.closest('[data-step]');
+    if (st) { if (st.dataset.step !== page) goStep(st.dataset.step); return; }
     const go = e.target.closest('[data-go]');
-    if (go) { if (go.classList.contains('mm-item')) lastHome = go; goPage(go.dataset.go); return; }
+    if (go) {
+      if (go.classList.contains('mm-item')) {
+        lastHome = go;
+        const f = go.dataset.go;
+        // CARRERA y PRÁCTICA: primero el auto, después la pista y al final las reglas
+        if (FLOWS[f]) { flow = f; goPage('garage'); return; }
+        flow = null;
+      }
+      goPage(go.dataset.go); return;
+    }
     if (e.target.closest('[data-back]')) goBack();
   });
+  $('g-choose').addEventListener('click', () => flowNext('garage'));
+  $('t-choose').addEventListener('click', () => flowNext('tracks'));
   let hoverT = 0, hoverEl = null;
   document.addEventListener('mouseover', e => {
     const it = e.target.closest?.('.mm-item');
@@ -302,10 +344,91 @@ export function initUI(api) {
     syncOptions(); sfx('menuupdown', { vol: 0.5 });
   });
 
+  // ---------- Escena 3D detrás del menú: el auto/pista quedan en el espacio libre al lado del panel ----------
+  const wide = () => matchMedia('(min-width: 641px)').matches;
+  function layoutScene() {
+    const m = api.G.mode;
+    const inMenu = m === 'menu' && !menu.hidden;
+    $('g-hero').hidden = !(inMenu && page === 'garage');
+    $('t-hero').hidden = !(inMenu && page === 'tracks');
+    $('sel-chip').hidden = inMenu && (page === 'garage' || page === 'tracks');
+    api.setMenuZoom(inMenu && page === 'garage' ? 0.78 : 1);
+    let sx = 0, sy = 0;
+    if (m === 'menu' || m === 'lobby' || m === 'results') {
+      const box = m === 'menu' ? menu.querySelector('.band') : $(m === 'lobby' ? 'scr-lobby' : 'scr-results').querySelector('.panel');
+      if (box && visible(box)) {
+        // medidas sin las animaciones de entrada (offset* no incluye transform)
+        if (wide()) sx = (box.offsetLeft + box.offsetWidth) / 2;
+        else if (m === 'menu') sy = Math.max(0, box.offsetHeight / 2); // panel abajo: la escena se ve arriba
+      }
+    }
+    api.setViewShift(sx, sy);
+  }
+  window.addEventListener('resize', () => layoutScene());
+
+  // ---------- Pistas: tarjetas con la silueta y datos reales ----------
+  const DIFF = ['', 'Fácil', 'Media', 'Difícil', 'Extrema'];
+  const stars = d => d ? '★'.repeat(d) + '☆'.repeat(4 - d) : '';
+  const infoTxt = i => [i.difficulty ? DIFF[i.difficulty] : null, i.lengthM ? i.lengthM + ' m' : null].filter(Boolean).join(' · ');
+  let heroId = null;
+  function decorateTracks() {
+    const names = new Map(api.tracks().map(t => [t.id, t.name]));
+    for (const b of $('tracksel').querySelectorAll('button[data-id]')) {
+      if (b.dataset.deco) continue;
+      b.dataset.deco = '1';
+      const id = b.dataset.id;
+      // foto característica de la pista (la imagen de carga del juego); se baja recién al verla
+      b.innerHTML = `<span class="tc-map"><img alt="" loading="lazy" src="${api.trackPhoto(id)}"></span><b>${names.get(id) || id}</b><i class="tc-stars"></i>`;
+      api.trackInfo(id).then(i => {
+        const st = b.querySelector('.tc-stars');
+        st.textContent = stars(i.difficulty); st.title = i.difficulty ? 'Dificultad: ' + DIFF[i.difficulty] : '';
+      });
+    }
+  }
+  function showHero(id) {
+    if (!id) return;
+    heroId = id;
+    const name = api.tracks().find(t => t.id === id)?.name || id;
+    $('t-name').textContent = name;
+    const chosen = id === api.trackId();
+    $('t-state').textContent = chosen ? 'Pista elegida' : 'Enter o clic para elegirla';
+    $('t-state').classList.toggle('on', chosen);
+    api.trackInfo(id).then(i => {
+      if (heroId !== id) return;
+      const img = $('t-map'); img.src = api.trackPhoto(id); img.alt = name;
+      const rec = api.recordText(id);
+      const row = (k, v) => `<div><dt>${k}</dt><dd>${v}</dd></div>`;
+      $('t-data').innerHTML =
+        row('Dificultad', i.difficulty ? `<span class="stars">${stars(i.difficulty)}</span> ${DIFF[i.difficulty]}` : '<span class="na">Sin dato</span>') +
+        row('Largo', i.lengthM ? i.lengthM + ' m' : '<span class="na">Sin dato</span>') +
+        row('Bonus', i.bonus) +
+        row('Atajos', i.forks ? 'Sí' : 'No') +
+        row('Récord', rec ? `${rec.lap} <small>${rec.car} · ${rec.name}</small>` : '<span class="na">Todavía no</span>');
+    });
+    const t = $('t-hero'); t.classList.remove('swap'); void t.offsetWidth; t.classList.add('swap');
+  }
+  function openTracks() {
+    decorateTracks();
+    $('tracks-count').textContent = api.tracks().length + ' pistas';
+    showHero(api.trackId());
+  }
+  $('tracksel').addEventListener('focusin', e => { const b = e.target.closest('button[data-id]'); if (b) showHero(b.dataset.id); });
+  $('tracksel').addEventListener('mouseover', e => { const b = e.target.closest('button[data-id]'); if (b && b.dataset.id !== heroId) showHero(b.dataset.id); });
+  // al elegir una pista (lo hace main.js con su carga de siempre) se actualiza la ficha
+  $('tracksel').addEventListener('click', e => { const b = e.target.closest('button[data-id]'); if (b) { sfx('menunext', { vol: 0.5 }); requestAnimationFrame(() => showHero(b.dataset.id)); } });
+  new MutationObserver(() => { if (page === 'tracks') decorateTracks(); }).observe($('tracksel'), { childList: true });
+
   // ---------- Resumen de auto y pista (datos reales del juego) ----------
   function refreshSummary() {
     const car = api.carName(), trk = api.trackName();
     for (const el of document.querySelectorAll('.sum-car')) el.textContent = car;
+    for (const el of document.querySelectorAll('.sum-track')) el.textContent = trk;
+    const tid = api.trackId();
+    if (tid) api.trackInfo(tid).then(i => {
+      if (api.trackId() !== tid) return;
+      for (const el of document.querySelectorAll('.track-sum img')) el.src = api.trackPhoto(tid);
+      for (const el of document.querySelectorAll('.sum-track-info')) el.textContent = infoTxt(i);
+    });
     $('mm-garage-sub').textContent = api.carCount() + ' autos para elegir';
     $('garage-count').textContent = api.carCount() + ' autos · ' + api.groupCount() + ' grupos';
     const chip = $('sel-chip');
@@ -329,6 +452,7 @@ export function initUI(api) {
     } else if (id === 'scr-lobby' || id === 'scr-results') {
       focusDefault($(id));
     }
+    layoutScene();
   }
 
   return { onShow, openPause, refreshSummary, isPaused: () => !pause.hidden };

@@ -12,6 +12,7 @@ import { CarEffects } from './effects.js';
 import { Records, LapRecorder, ghostAt } from './ghost.js';
 import { Weapons, WEAPONS } from './weapons.js';
 import { initUI } from './ui.js';
+import { trackInfo, minimapSegs, startOf } from './trackinfo.js';
 
 THREE.ColorManagement.enabled = false;
 
@@ -30,9 +31,18 @@ renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, 1, 4, 32000);
+// En el menú el auto se corre al espacio libre al lado del panel (a la derecha; en el celular, arriba)
+let viewShift = 0, viewShiftY = 0;
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
-  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false); camera.aspect = w / h;
+  if (viewShift || viewShiftY) camera.setViewOffset(w, h, -viewShift, viewShiftY, w, h); else camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+}
+function setViewShift(px, py = 0) {
+  px = Math.round(px || 0); py = Math.round(py || 0);
+  if (px === viewShift && py === viewShiftY) return;
+  viewShift = px; viewShiftY = py; resize();
 }
 window.addEventListener('resize', resize); resize();
 
@@ -161,7 +171,7 @@ async function buildTrack(T) {
 }
 
 // ---------- Arreglos de pistas ----------
-const NCP_COLLISION = new Set(['casinorv']);
+const NCP_COLLISION = new Set(['casinorv', 'toy2', 'spavolt1']);
 // Coordenadas de three (y para arriba). Rampa: de "from" (abajo) a "to" (arriba), con su ancho.
 const TRACK_EXTRAS = {
   // pileta del barco: 500 de profundidad y sin salida; rampa de madera contra la pared del lado de la pista
@@ -445,6 +455,7 @@ async function spawnMyCar(slot = 0) {
   G.phys = new CarPhysics(cd.params, cd.box, world);
   G.phys.steerGain = G.steerSens / 100;
   G.vis = new CarVisual(G.carId);
+  G.popT = performance.now(); // el auto nuevo aparece con un pequeño "pop" en el menú
   audio.setOwnEngine(engineUrl(G.carId));
   G.prevPos = null;
   G.pathHint = { from: null };
@@ -899,15 +910,8 @@ function honk() {
 // ---------- Minimapa ----------
 const minimap = new Minimap($('h-map'));
 function buildMinimap(T) {
-  const segs = [];
-  if (T.ai) for (const n of T.ai.nodes) for (const j of n.next) { const m = T.ai.nodes[j]; segs.push({ a: n.p, b: m.p, w: (n.w + m.w) / 2 }); }
-  else if (T.path) {
-    const P = n => ({ x: n.pos[0], z: -n.pos[2] });
-    for (const n of T.path.nodes) for (const j of n.next) segs.push({ a: P(n), b: P(T.path.nodes[j]), w: 450 });
-  }
-  const S = rv2three(...T.inf.startPos), a = T.inf.startRot * Math.PI * 2;
-  const f = rv2three(Math.sin(a), 0, Math.cos(a));
-  minimap.setTrack(segs, { x: S[0], z: S[2] }, { x: f[0], z: f[2] });
+  const s = startOf(T.inf);
+  minimap.setTrack(minimapSegs(T.ai, T.path), s.start, s.dir);
 }
 let mapT = 0;
 function drawMinimap(now) {
@@ -1039,6 +1043,11 @@ function stepCar(dir, inGroup = true) {
   const i = list.findIndex(d => d.id === G.carId);
   selectCar(list[(i + dir + list.length) % list.length].id);
 }
+// centra el auto elegido en la tira de fotos (solo de costado, sin mover la página)
+function scrollStrip(strip) {
+  const sel = strip.querySelector('[aria-selected=true]'); if (!sel) return;
+  strip.scrollLeft = Math.max(0, sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2);
+}
 function renderCars() {
   const def = carDef(G.carId), P = carDefs.get(G.carId).params;
   garageGroup ??= def.group;
@@ -1047,21 +1056,24 @@ function renderCars() {
   tabs.innerHTML = garageGroups().map(g => `<button type="button" role="tab" aria-selected="${g === garageGroup}" data-g="${esc(g)}">${esc(g)}<small>${carsIn(g).length} autos</small></button>`).join('');
   // tarjeta del auto elegido
   const list = carsIn(def.group), idx = list.findIndex(d => d.id === G.carId);
-  $('g-name').textContent = P.name;
-  $('g-sub').textContent = `${def.group} · ${idx + 1} de ${list.length}`;
+  const nm = $('g-name');
+  if (nm.textContent !== P.name) { nm.textContent = P.name; nm.classList.remove('swap'); void nm.offsetWidth; nm.classList.add('swap'); }
+  $('g-sub').innerHTML = `<span>${esc(def.group)}</span><b>${String(idx + 1).padStart(2, '0')}<small>/${String(list.length).padStart(2, '0')}</small></b>`;
   const img = $('g-shot'); img.alt = P.name;
   const want = G.carId;
   carThumb(want).then(u => { if (G.carId === want) img.src = u; }).catch(() => {});
   const n = carNums(P), R = statsRange();
   const kmh = Math.round(n.top * MPH_PER_UNIT * 1.609);
-  const row = (label, p, v = '') => `<dt>${label}</dt><dd><span class="bar"><i style="width:${p}%"></i></span></dd><dd class="v">${v}</dd>`;
+  // barras de 10 bloques (cada bloque = 10 % del rango entre el auto con menos y el que tiene más)
+  const row = (label, p, v = '') => `<dt>${label}</dt><dd class="blk" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}" aria-label="${label}">${Array.from({ length: 10 }, (_, k) => `<i class="${k < Math.round(p / 10) ? 'on' : ''}" style="--k:${k}"></i>`).join('')}</dd><dd class="v">${v}</dd>`;
   $('g-stats').innerHTML =
     row('Velocidad', pct(n.top, R.top), kmh + ' km/h') +
     row('Aceleración', pct(n.acc, R.acc)) +
     row('Agarre', pct(n.grip, R.grip)) +
     row('Dirección', pct(n.steer, R.steer)) +
-    row('Peso', pct(n.mass, R.mass), n.mass.toFixed(1) + ' kg') +
-    `<div class="tags"><span>${MOTOR[P.cls] || MOTOR[0]}</span><span>${drivetrain(P)}</span>${P.rating >= 0 ? `<span>Nivel ${RATING[Math.min(5, P.rating | 0)]}</span>` : ''}</div>`;
+    row('Peso', pct(n.mass, R.mass), n.mass.toFixed(1) + ' kg');
+  // tipo de motor, tracción y nivel (datos del parameters.txt), sobre la escena al lado del nombre
+  $('g-tags').innerHTML = `<span>${MOTOR[P.cls] || MOTOR[0]}</span><span>${drivetrain(P)}</span>${P.rating >= 0 ? `<span>Nivel ${RATING[Math.min(5, P.rating | 0)]}</span>` : ''}`;
   // tira de fotos del grupo que se está mirando
   const strip = $('g-strip');
   strip.innerHTML = '';
@@ -1073,7 +1085,7 @@ function renderCars() {
     strip.appendChild(b);
     carThumb(d.id).then(u => { b.querySelector('img').src = u; }).catch(() => {});
   }
-  strip.querySelector('[aria-selected=true]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  scrollStrip(strip);
   $('lc-name').textContent = P.name;
 }
 $('g-tabs').addEventListener('click', e => {
@@ -1545,7 +1557,7 @@ function updateCamera(dt) {
   if (fwd.lengthSq() < 1e-4) fwd.copy(camDir); fwd.normalize();
   if (G.mode === 'menu' || G.mode === 'lobby' || G.mode === 'results') {
     orbit += dt * 0.35;
-    const sc = carScale();
+    const sc = carScale() * (G.menuZoom || 1); // en el garage la cámara se acerca al auto
     const want = P.pos.clone().add(new THREE.Vector3(Math.sin(orbit) * 230 * sc, 75 * sc, Math.cos(orbit) * 230 * sc));
     const look = P.pos.clone().add(new THREE.Vector3(0, 10, 0));
     const k = 1 - Math.exp(-dt * 7);
@@ -1787,6 +1799,8 @@ function frame(now) {
     G.renderPos.lerpVectors(G.prevPos, P.pos, alpha); G.renderQuat.slerpQuaternions(G.prevQuat, P.quat, alpha);
   } else { G.renderPos.copy(P.pos); G.renderQuat.copy(P.quat); }
   G.vis.root.position.copy(G.renderPos); G.vis.root.quaternion.copy(G.renderQuat);
+  if (!driving) { const k = Math.min(1, (now - (G.popT || 0)) / 260); G.vis.root.scale.setScalar(0.82 + 0.18 * (1 - (1 - k) ** 3)); }
+  else if (G.vis.root.scale.x !== 1) G.vis.root.scale.setScalar(1);
   G.vis.setWheels(P.wheels.map(w => w.suspOffset), P.wheels.map(w => w.steerAngle || 0), P.wheels.map(w => w.spin));
 
   // Remotos: interpolación suave
@@ -1942,6 +1956,13 @@ ui = initUI({
   trackName: () => manifest ? trackDef(G.trackId).name : '',
   carCount: () => manifest ? manifest.cars.filter(d => carDefs.has(d.id)).length : 0,
   groupCount: () => manifest ? garageGroups().length : 0,
+  // Fase 2: datos de pistas, récords, cámara del menú
+  tracks: () => manifest ? manifest.tracks.map(t => ({ id: t.id, name: t.name })) : [],
+  trackId: () => G.trackId,
+  trackInfo: id => trackInfo(BASE, trackDef(id)),
+  trackPhoto: id => BASE + 'tracks/' + id + '/preview.jpg', // foto de la pista (pantalla de carga del juego)
+  recordText: id => { const r = records.get(id); return r ? { lap: fmt(r.lap), car: carDefs.get(r.car)?.params.name || r.car, name: r.name } : null; },
+  setViewShift, setMenuZoom: z => { G.menuZoom = z; },
 });
 requestAnimationFrame(frame);
 boot();

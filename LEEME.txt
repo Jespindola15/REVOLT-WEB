@@ -5,7 +5,7 @@ Una versión para el navegador de Re-Volt, hecha con los modelos, texturas y
 parámetros originales del juego. Se juega en Chrome, solo o online con amigos
 (hasta 8 por sala).
 
-Pistas (10):
+Pistas (12):
   - Toys in the Hood 1
   - Toy World 1 (la juguetería)
   - Casino RV (con la ruleta que gira)
@@ -16,6 +16,8 @@ Pistas (10):
   - ARM Kart Track
   - Evergreen Hills
   - Donniengton Park
+  - Toy World 2 (la otra de la juguetería)
+  - Spa-Volt 1 (el hotel con pileta)
 
 Autos (43):
   - Clásicos: RC Bandit, Col. Moss, Adeon, AMW, Volken Turbo, Dust Mite,
@@ -44,6 +46,10 @@ GARAGE y OPCIONES. Se maneja con el mouse, con el teclado (↑ ↓ para elegir,
 ← → para cambiar una opción, Enter para aceptar, Esc para volver) o con el
 joystick (cruceta o palanca, A acepta, B vuelve). Tu nombre se escribe en la
 patente de abajo.
+CARRERA y PRÁCTICA te llevan paso a paso: 1 AUTO (el garage, con el auto de
+verdad girando y su ficha técnica) → 2 PISTA (cada pista con la forma del
+circuito, dificultad, largo, bonus, atajos y récord) → 3 REGLAS o SALIDA.
+Podés saltar de un paso a otro tocando los números de arriba.
 En OPCIONES están el volumen, la sensibilidad de la dirección, la lista de
 controles y la calidad de imagen (Baja va más fluido en compus lentas).
 
@@ -88,7 +94,7 @@ MINIMAPA, RÉCORDS Y FANTASMA
 - Arriba a la izquierda hay un mapa de la pista: vos sos la flecha amarilla,
   tus amigos los puntos rojos y los rivales de la PC los blancos.
 - Cada pista guarda su récord de vuelta (en tu navegador) con el auto y el
-  nombre. Aparece en el menú, abajo de las pistas, y en la carrera.
+  nombre. Aparece en la pantalla de PISTAS y en la carrera.
 - En PRÁCTICA corre el FANTASMA de tu vuelta récord: un auto
   transparente que repite esa vuelta, para que veas dónde ganás o perdés.
 
