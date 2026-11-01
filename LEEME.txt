@@ -108,13 +108,18 @@ lado de tu nombre; el anfitrión ve cuántos están listos en el botón de
 empezar.
 
 
-CAMPEONATO ONLINE
+CAMPEONATO (COPA)
 -----------------
-En la sala, el anfitrión elige "Modo": Una carrera, Copa de 3, Copa de 4 o
-Todas las pistas. En la copa se corren varias pistas seguidas (empezando por
-la elegida) y se suman puntos por posición: 10, 8, 6, 5, 4, 3, 2 y 1. En la
-pantalla de resultados se ve la tabla del campeonato y el anfitrión arranca
-la siguiente pista. Al final aparece el campeón.
+Se corren varias pistas seguidas (empezando por la elegida) y se suman puntos
+por posición: 10, 8, 6, 5, 4, 3, 2 y 1. Si dos quedan empatados en puntos,
+gana el que tiene más carreras ganadas (si siguen iguales, más segundos
+puestos, y así). Al final aparece el campeón.
+- Contra la PC: en CARRERA, "Modo": Carrera, Copa 3, Copa 4 o Todas. Corrés
+  siempre contra los mismos rivales. Los que no llegaron cuando cruzás la
+  meta quedan detrás, en el orden en que iban, y suman sus puntos igual.
+  Entre pista y pista tocás "Siguiente pista".
+- Online: en la sala, el anfitrión elige el modo y arranca cada pista. Los que
+  no llegaron cuando arranca la siguiente suman 0.
 
 
 CÓMO JUGAR ONLINE

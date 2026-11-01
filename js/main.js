@@ -672,6 +672,9 @@ function finishRace(now) {
   audio.play('pickgen', { vol: 0.9 });
   setTimeout(() => {
     if (G.mode !== 'race') return;
+    // contra la PC: los rivales que todavía no llegaron entran detrás, en el orden en que iban
+    if (!G.online) [...G.bots].filter(b => !b.lap.finished).sort((a, b) => botProgress(b) - botProgress(a))
+      .forEach(b => addResult({ id: b.id, name: b.name, time: null, dnf: true }));
     G.mode = 'results'; $('btn-res-back').textContent = G.online && net?.active ? 'Volver a la sala' : 'Volver al menú';
     show('scr-results'); renderCup();
   }, 2200);
@@ -679,8 +682,10 @@ function finishRace(now) {
 
 function addResult(r) {
   if (G.results.find(x => x.id === r.id)) return;
-  G.results.push(r); G.results.sort((a, b) => a.time - b.time);
-  $('res-body').innerHTML = G.results.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.name)}</td><td>${fmt(x.time)}</td></tr>`).join('');
+  G.results.push(r);
+  // primero los que llegaron (por tiempo); los que no llegaron quedan en el orden en que se agregaron
+  G.results.sort((a, b) => (a.time == null) - (b.time == null) || (a.time != null ? a.time - b.time : 0));
+  $('res-body').innerHTML = G.results.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.name)}</td><td>${x.time == null ? 'No llegó' : fmt(x.time)}</td></tr>`).join('');
   renderCup();
 }
 
@@ -767,15 +772,18 @@ function clearBots() {
   for (const b of G.bots) { b.vis?.dispose(); audio.removeRemote(b.id); }
   G.bots = [];
 }
-async function startBotRace() {
-  audio.unlock(); clearGhost(); G.cup = null;
+// cup: copa contra la PC en curso ({tracks, round, laps, points, bots, offline}); sin copa, una carrera suelta
+async function startBotRace(cup = null) {
+  audio.unlock(); clearGhost(); G.cup = cup;
   await setTrack(G.trackId);
   clearBots();
   if (!track.path) { $('menu-status').textContent = 'Esta pista no tiene recorrido para los rivales.'; return; }
   // rivales con autos distintos al tuyo (al azar)
   const pool = manifest.cars.map(c => c.id).filter(id => id !== G.carId && carDefs.has(id));
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-  const ids = G.botForce || Array.from({ length: G.botCount }, (_, i) => pool[i % pool.length]); // botForce: solo para pruebas
+  // en la copa son siempre los mismos rivales (botForce: reiniciar la carrera y pruebas)
+  const ids = G.botForce || cup?.bots || Array.from({ length: G.botCount }, (_, i) => pool[i % pool.length]);
+  if (cup && !cup.bots) cup.bots = ids.slice();
   busy('Cargando rivales…');
   try { await Promise.all(ids.map(id => ensureCar(id))); } catch (e) { busy(null); $('menu-status').textContent = 'No se pudieron cargar los rivales: ' + e.message; return; }
   busy(null);
@@ -793,7 +801,8 @@ async function startBotRace() {
   });
   // vos arrancás último, como en Re-Volt
   await spawnMyCar(G.bots.length);
-  G.mode = 'race'; G.online = false; G.laps = G.botLaps;
+  G.mode = 'race'; G.online = false; G.laps = cup ? cup.laps : G.botLaps;
+  if (cup) setTimeout(() => toast(`Copa · pista ${cup.round + 1} de ${cup.tracks.length}`), 400);
   G.myPlace = G.bots.length + 1; G.nPlace = G.bots.length + 1;
   weapons.clearAll();
   show(null); startCountdown(performance.now());
@@ -1131,7 +1140,19 @@ function bindSel(id, cur, key, set) {
 bindSel('botsel', G.botCount, 'rv.bots', v => { G.botCount = +v; });
 bindSel('botlaps', G.botLaps, 'rv.botlaps', v => { G.botLaps = +v; });
 bindSel('botdiff', G.botDiff, 'rv.botdiff', v => { G.botDiff = v; });
-$('btn-bots').onclick = () => { getName(); audio.unlock(); audio.play('menunext', { vol: 0.6 }); startBotRace(); };
+G.botCup = [0, 3, 4, 99].includes(+store.get('rv.botcup', '0')) ? +store.get('rv.botcup', '0') : 0;
+bindSel('botcup', G.botCup, 'rv.botcup', v => { G.botCup = +v; });
+$('btn-bots').onclick = () => {
+  getName(); audio.unlock(); audio.play('menunext', { vol: 0.6 });
+  // copa contra la PC: varias pistas seguidas empezando por la elegida, con los mismos rivales
+  const n = Math.min(manifest.tracks.length, G.botCup || 0);
+  let cup = null;
+  if (n > 1) {
+    const i0 = manifest.tracks.findIndex(t => t.id === G.trackId);
+    cup = { tracks: Array.from({ length: n }, (_, k) => manifest.tracks[(i0 + k) % manifest.tracks.length].id), round: 0, laps: G.botLaps, points: {}, offline: true };
+  }
+  startBotRace(cup);
+};
 $('btn-practice').onclick = () => { getName(); audio.unlock(); audio.play('menunext', { vol: 0.6 }); startPractice(); };
 $('btn-host').onclick = async () => {
   const name = getName(); audio.unlock();
@@ -1289,14 +1310,18 @@ function renderPlayers() {
 const CUP_POINTS = [10, 8, 6, 5, 4, 3, 2, 1];
 G.cupN = 0;
 // puntos acumulados + los de la carrera actual (según el orden de llegada)
+// Desempate: más carreras ganadas; si siguen iguales, más segundos puestos, y así (como en la F1)
 function cupStandings(cup = G.cup) {
   const pts = {};
-  for (const [id, v] of Object.entries(cup.points || {})) pts[id] = { name: v.name, pts: v.pts };
+  for (const [id, v] of Object.entries(cup.points || {})) pts[id] = { name: v.name, pts: v.pts, pos: (v.pos || []).slice() };
   if (!cup.done) G.results.forEach((r, i) => {
-    pts[r.id] ??= { name: r.name, pts: 0 };
-    pts[r.id].name = r.name; pts[r.id].pts += CUP_POINTS[i] || 0;
+    pts[r.id] ??= { name: r.name, pts: 0, pos: [] };
+    const p = pts[r.id];
+    p.name = r.name; p.pts += CUP_POINTS[i] || 0;
+    p.pos[i] = (p.pos[i] || 0) + 1;
   });
-  return Object.entries(pts).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.pts - a.pts || (a.name < b.name ? -1 : 1));
+  const byPlaces = (a, b) => { for (let k = 0; k < 8; k++) { const d = (b.pos[k] || 0) - (a.pos[k] || 0); if (d) return d; } return 0; };
+  return Object.entries(pts).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.pts - a.pts || byPlaces(a, b) || (a.name < b.name ? -1 : 1));
 }
 function renderCup() {
   const box = $('cup-box');
@@ -1305,28 +1330,34 @@ function renderCup() {
   const cup = G.cup, n = cup.tracks.length, last = cup.round >= n - 1;
   const list = cupStandings();
   $('cup-title').textContent = cup.done ? 'Campeonato terminado' : `Campeonato · pista ${cup.round + 1} de ${n}: ${trackDef(cup.tracks[cup.round]).name}`;
-  $('cup-body').innerHTML = list.map((x, i) => `<tr class="${i === 0 ? 'lead' : ''}"><td>${i + 1}</td><td>${esc(x.name)}</td><td>${x.pts}</td></tr>`).join('');
-  const host = !!net?.isHost && net.active;
+  $('cup-body').innerHTML = list.map((x, i) => `<tr class="${i === 0 ? 'lead' : ''}"><td>${i + 1}</td><td>${esc(x.name)}${x.pos[0] ? ` <small class="wins">${x.pos[0]} ${x.pos[0] > 1 ? 'victorias' : 'victoria'}</small>` : ''}</td><td>${x.pts}</td></tr>`).join('');
+  const host = (!!net?.isHost && net.active) || !!cup.offline;
   const nb = $('btn-cup-next');
   nb.hidden = !host || !!cup.done;
   nb.textContent = last ? 'Terminar campeonato' : 'Siguiente pista: ' + trackDef(cup.tracks[cup.round + 1]).name;
   const info = $('cup-info');
   if (cup.done) info.innerHTML = list.length ? `<span class="champ">🏆 ${esc(list[0].name)}</span>` : '';
-  else info.textContent = host ? 'Cuando quieras, arrancá la siguiente (los que no llegaron suman 0).' : 'Esperando que el anfitrión arranque la siguiente pista…';
+  else info.textContent = cup.offline ? 'Puntos: 10, 8, 6, 5, 4, 3, 2 y 1. Si hay empate, gana el que tiene más carreras ganadas.'
+    : host ? 'Cuando quieras, arrancá la siguiente (los que no llegaron suman 0).' : 'Esperando que el anfitrión arranque la siguiente pista…';
 }
 $('btn-cup-next').onclick = () => {
-  if (!G.cup || !net?.isHost) return;
+  if (!G.cup || !(G.cup.offline || net?.isHost)) return;
   const points = {};
-  for (const x of cupStandings()) points[x.id] = { name: x.name, pts: x.pts };
+  for (const x of cupStandings()) points[x.id] = { name: x.name, pts: x.pts, pos: x.pos };
   const cup = { ...G.cup, points };
   if (cup.round >= cup.tracks.length - 1) {
     G.cup = { ...cup, done: true };
-    net.send({ t: 'cupend', cup: G.cup });
+    if (!cup.offline) net.send({ t: 'cupend', cup: G.cup });
     renderCup();
     audio.play('pickgen', { vol: 0.9 });
     return;
   }
   cup.round++;
+  if (cup.offline) { // contra la PC: la siguiente pista con los mismos rivales
+    G.trackId = cup.tracks[cup.round];
+    startBotRace(cup);
+    return;
+  }
   const grid = [...net.players.keys()];
   const track = cup.tracks[cup.round];
   net.send({ t: 'start', laps: cup.laps, grid, track, cup });
@@ -1736,7 +1767,7 @@ async function restartRace() {
   if (G.mode !== 'race' || G.online) return;
   const prev = G.botForce;
   G.botForce = G.bots.map(b => b.carId);
-  try { await startBotRace(); } finally { G.botForce = prev; }
+  try { await startBotRace(G.cup); } finally { G.botForce = prev; }
 }
 // calidad de imagen: solo cambia la resolución a la que se dibuja
 function setQuality(q) {

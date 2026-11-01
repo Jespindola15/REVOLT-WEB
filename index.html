@@ -244,6 +244,7 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
             <span>Rivales</span><div class="lapsel" id="botsel" data-autoselect><button type="button" data-v="1">1</button><button type="button" data-v="3">3</button><button type="button" data-v="5">5</button><button type="button" data-v="7">7</button></div>
             <span>Vueltas</span><div class="lapsel" id="botlaps" data-autoselect><button type="button" data-v="1">1</button><button type="button" data-v="3">3</button><button type="button" data-v="5">5</button></div>
             <span>Nivel</span><div class="lapsel" id="botdiff" data-autoselect><button type="button" data-v="facil">Fácil</button><button type="button" data-v="normal">Normal</button><button type="button" data-v="dificil">Difícil</button></div>
+            <span>Modo</span><div class="lapsel" id="botcup" data-autoselect><button type="button" data-v="0">Carrera</button><button type="button" data-v="3">Copa 3</button><button type="button" data-v="4">Copa 4</button><button type="button" data-v="99">Todas</button></div>
           </div>
         </div>
         <div class="car-sum"><span>Tu auto</span><b class="sum-car"></b><button type="button" class="chip" data-go="garage">Cambiar</button></div>
@@ -428,7 +429,7 @@ input[type=text]:focus { border-color: var(--volt); outline: none; }
       <div class="lapsel" id="cupsel" data-autoselect>
         <button type="button" data-v="0" aria-pressed="true">Una carrera</button><button type="button" data-v="3">Copa de 3</button><button type="button" data-v="4">Copa de 4</button><button type="button" data-v="99">Todas</button>
       </div>
-      <p class="hint">En la copa se corren varias pistas seguidas y se suman puntos: 10, 8, 6, 5, 4, 3, 2 y 1.</p>
+      <p class="hint">En la copa se corren varias pistas seguidas y se suman puntos: 10, 8, 6, 5, 4, 3, 2 y 1. Si hay empate, gana el que tiene más carreras ganadas.</p>
     </div>
     <p class="hint" id="lobby-cup-name" hidden></p>
     <div class="field" id="lap-field">
