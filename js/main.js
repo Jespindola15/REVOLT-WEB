@@ -482,25 +482,94 @@ function trackGoodSpot(now) {
   const hw = track.ai.halfWidth(st);
   if (st.d2 < (hw + 120) ** 2 && Math.abs(P.pos.y - lineY) < 160) G.goodSt = { from: st.from, to: st.to, t: st.t, picks: { ...(st.picks || {}) } };
 }
-// punto de la pista donde reaparecer (posición apoyada en el piso y hacia dónde mirar)
-function trackSpawnAt(st, fwd = 0) {
-  const sp = track.ai.spawnPoint(st, fwd);
+// punto de la pista donde reaparecer (posición apoyada en el piso y hacia dónde mirar).
+// Se prueban varios lugares (centro de la pista, línea de carrera y a los costados; un poco más adelante o
+// más atrás) y se elige el primero que sea seguro: piso firme y plano bajo las 4 ruedas, nada alrededor
+// ni encima, y a la altura de la pista (no el techo de un túnel ni un piso de abajo).
+const _dn = new THREE.Vector3(0, -1, 0), _upv = new THREE.Vector3(0, 1, 0);
+let spawnStrict = true; // primero exigente; si no hay ningún lugar así (ej.: un caño redondo), más flexible
+function groundAt(x, y, z, above = 90, below = 400) {
+  const h = world.bvh.raycastFirst(new THREE.Ray(new THREE.Vector3(x, y + above, z), _dn), THREE.DoubleSide, 0, above + below);
+  if (!h || h.vel) return null; // nada abajo, o un piso que se mueve (la ruleta del casino)
+  return Math.abs(h.face.normal.y) > (spawnStrict ? 0.9 : 0.78) ? h.point.y : null; // piso casi plano
+}
+// lejos de los objetos que giran (la ruleta): si no, te arrastran apenas aparecés
+function nearSpinner(c) {
+  for (const sp of world.bvh.spinners || []) {
+    if (sp._r == null) { const bx = new THREE.Box3().setFromObject(sp.group); sp._r = Math.max(bx.max.x - bx.min.x, bx.max.z - bx.min.z) / 2; }
+    if (Math.hypot(c.x - sp.group.position.x, c.z - sp.group.position.z) < sp._r + 90) return true;
+  }
+  return false;
+}
+function spotOk(c, f, lineY, size) {
+  if (nearSpinner(c)) return null;
+  // a la altura de la línea de carrera (en los saltos la línea va por el aire: ahí se acepta más abajo)
+  const g = groundAt(c.x, lineY, c.z, 90, spawnStrict ? 300 : 600);
+  if (g == null || Math.abs(g - lineY) > (spawnStrict ? 150 : 400)) return null;
+  const r = new THREE.Vector3(-f.z, 0, f.x);
+  // las 4 esquinas del auto (con un poco de margen) apoyadas a la misma altura: ni borde ni escalón
+  for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+    const x = c.x + f.x * size.l * a + r.x * size.w * b, z = c.z + f.z * size.l * a + r.z * size.w * b;
+    const gy = groundAt(x, g, z, 60, 120);
+    if (gy == null || Math.abs(gy - g) > (spawnStrict ? 16 : 30)) return null;
+  }
+  // nada alrededor (paredes, objetos) ni un techo bajo encima
+  const rad = Math.max(size.l, size.w) + (spawnStrict ? 20 : 4);
+  for (let k = 0; k < 8; k++) {
+    const a = k * Math.PI / 4, d = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+    for (const hh of [22, 48]) {
+      const h = world.bvh.raycastFirst(new THREE.Ray(new THREE.Vector3(c.x, g + hh, c.z), d), THREE.DoubleSide, 0, rad);
+      if (h && Math.abs(h.face.normal.y) < 0.7) return null;
+    }
+  }
+  if (world.bvh.raycastFirst(new THREE.Ray(new THREE.Vector3(c.x, g + 5, c.z), _upv), THREE.DoubleSide, 0, spawnStrict ? 90 : 55)) return null;
+  return g;
+}
+function trackSpawnAt(st, fwd = 0, box = null) {
+  const ai = track.ai;
+  // tamaño del auto (medio largo y medio ancho) para revisar el lugar
+  let size = { l: 62, w: 38 }, lift = 30;
+  if (box) { size = { l: (box.max.z - box.min.z) / 2 + 12, w: (box.max.x - box.min.x) / 2 + 10 }; lift = Math.max(30, -box.min.y + 12); }
+  const base = { from: st.from, to: st.to, t: st.t, picks: { ...(st.picks || {}) } };
+  for (const strict of [true, false]) {
+  spawnStrict = strict;
+  const dists = [0, 140, 280, -140, 450, 650, -300, 900, 1200, -500, 1600].concat(strict ? [] : [2000, 2500, 3000, -800, 3600, -1100, -1600, 4500]);
+  for (const d of dists.map(x => fwd + x)) {
+    const sp = ai.spawnPoint({ ...base, picks: { ...base.picks } }, Math.max(0, d));
+    if (!sp) continue;
+    const f = sp.dir;
+    // centro de la pista en ese tramo (el borde de la línea de carrera puede ir pegado al cordón)
+    const s2 = { ...base, picks: { ...base.picks } };
+    ai.locate(sp.pos, s2);
+    const n = ai.nodes[s2.from], m = ai.nodes[s2.to] || n;
+    const center = n.a.clone().lerp(n.b, 0.5).lerp(m.a.clone().lerp(m.b, 0.5), s2.t);
+    const half = Math.min(n.w, m.w) / 2;
+    const right = new THREE.Vector3(-f.z, 0, f.x);
+    const cands = [center, sp.pos, center.clone().addScaledVector(right, half * 0.3), center.clone().addScaledVector(right, -half * 0.3), center.clone().addScaledVector(right, half * 0.55), center.clone().addScaledVector(right, -half * 0.55)];
+    for (const c of cands) {
+      const g = spotOk(c, f, sp.pos.y, size);
+      if (g != null) { spawnStrict = true; window.__lastSpawn = [d, cands.indexOf(c), strict]; return { pos: new THREE.Vector3(c.x, g + lift, c.z), yaw: Math.atan2(-f.x, -f.z) }; }
+    }
+  }
+  }
+  spawnStrict = true;
+  // ningún lugar perfecto: la línea de carrera, apoyada en el piso más cercano (como antes)
+  window.__lastSpawn = 'respaldo';
+  const sp = ai.spawnPoint(base, fwd);
   if (!sp) return null;
   const p = sp.pos.clone();
-  // el piso justo debajo de la línea (empezando cerca, para no caer arriba del techo de un túnel)
   for (const h of [80, 300]) {
-    const hit = world.bvh.raycastFirst(new THREE.Ray(p.clone().add(new THREE.Vector3(0, h, 0)), new THREE.Vector3(0, -1, 0)), THREE.DoubleSide, 0, h + 400);
-    if (hit && Math.abs(hit.face.normal.y) > 0.5) { p.y = hit.point.y + 30; return { pos: p, yaw: Math.atan2(-sp.dir.x, -sp.dir.z) }; }
+    const hit = world.bvh.raycastFirst(new THREE.Ray(p.clone().add(new THREE.Vector3(0, h, 0)), _dn), THREE.DoubleSide, 0, h + 400);
+    if (hit && Math.abs(hit.face.normal.y) > 0.5) { p.y = hit.point.y + lift; return { pos: p, yaw: Math.atan2(-sp.dir.x, -sp.dir.z) }; }
   }
-  p.y += 30;
-  return { pos: p, yaw: Math.atan2(-sp.dir.x, -sp.dir.z) };
+  return null; // ni piso abajo: mejor el último lugar firme por donde pasó el auto
 }
 function respawnOnTrack(phys) {
   let spot = null;
   if (track?.ai) {
     let st = G.goodSt;
     if (!st) { st = { from: null }; track.ai.locate(phys.pos, st); }
-    if (st.from != null) spot = trackSpawnAt({ ...st, picks: { ...(st.picks || {}) } });
+    if (st.from != null) spot = trackSpawnAt({ ...st, picks: { ...(st.picks || {}) } }, 0, phys === G.phys ? carDefs.get(G.vis?.carId || G.carId)?.box : null);
   } else if (track?.path) {
     const loc = pathLocate(phys.pos, G.pathHint);
     if (loc) {
@@ -813,7 +882,7 @@ function resetBotToPath(b) {
     track.ai.locate(b.phys.pos, b.driver.st);
     const sp = track.ai.spawnPoint(b.driver.st, 250); // un poco más adelante, pasando lo que lo trababa
     if (sp) {
-      const s2 = trackSpawnAt({ ...b.driver.st, picks: { ...(b.driver.st.picks || {}) } }, 250) || { pos: sp.pos.clone().add(new THREE.Vector3(0, 30, 0)), yaw: Math.atan2(-sp.dir.x, -sp.dir.z) };
+      const s2 = trackSpawnAt({ ...b.driver.st, picks: { ...(b.driver.st.picks || {}) } }, 250, carDefs.get(b.carId)?.box) || { pos: sp.pos.clone().add(new THREE.Vector3(0, 30, 0)), yaw: Math.atan2(-sp.dir.x, -sp.dir.z) };
       b.phys.place(s2.pos, s2.yaw);
       b.prevPos = null; b.driver.lostT = 0; b.driver.stuckT = 0; b.driver.revT = 0;
       return;
@@ -1338,10 +1407,17 @@ function renderCup() {
   const info = $('cup-info');
   if (cup.done) info.innerHTML = list.length ? `<span class="champ">🏆 ${esc(list[0].name)}</span>` : '';
   else info.textContent = cup.offline ? 'Puntos: 10, 8, 6, 5, 4, 3, 2 y 1. Si hay empate, gana el que tiene más carreras ganadas.'
-    : host ? 'Cuando quieras, arrancá la siguiente (los que no llegaron suman 0).' : 'Esperando que el anfitrión arranque la siguiente pista…';
+    : host ? 'Cuando quieras, arrancá la siguiente. Los que no llegaron suman según el puesto en el que iban.' : 'Esperando que el anfitrión arranque la siguiente pista…';
 }
 $('btn-cup-next').onclick = () => {
   if (!G.cup || !(G.cup.offline || net?.isHost)) return;
+  // online: los que todavía no llegaron suman según el puesto en el que iban (como contra la PC)
+  if (!G.cup.offline && !G.cup.done) {
+    const now = performance.now();
+    [...G.remotes.entries()].filter(([id]) => !G.results.find(x => x.id === id))
+      .sort((a, b) => remoteProgress(b[1], now) - remoteProgress(a[1], now))
+      .forEach(([id, r]) => addResult({ id, name: r.name || nameOf(id), time: null, dnf: true }));
+  }
   const points = {};
   for (const x of cupStandings()) points[x.id] = { name: x.name, pts: x.pts, pos: x.pos };
   const cup = { ...G.cup, points };
@@ -1971,6 +2047,7 @@ async function boot() {
     };
     window.__rv = { G, scene, camera, get world() { return world; }, carDefs, get track() { return track; }, renderer, progressValue, pathFraction, setTrack, ensureCar, pathLocate, audio, weapons, THREE, gridSlot, startBotRace, botProgress, TUNE, records, BotDriver, botNav,
       selectCar,
+      respawnOnTrack, trackSpawnAt, // pruebas del reaparecer
       finishTest: t => { G.locked = false; G.goTime = performance.now() - t; finishRace(performance.now()); },
       netIsHost: () => !!net?.isHost, netDrop: () => { try { net.hostConn?.close(); } catch (e) {} } };
   } catch (e) {

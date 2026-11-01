@@ -119,7 +119,7 @@ puestos, y así). Al final aparece el campeón.
   meta quedan detrás, en el orden en que iban, y suman sus puntos igual.
   Entre pista y pista tocás "Siguiente pista".
 - Online: en la sala, el anfitrión elige el modo y arranca cada pista. Los que
-  no llegaron cuando arranca la siguiente suman 0.
+  no llegaron cuando arranca la siguiente suman según el puesto en el que iban.
 
 
 CÓMO JUGAR ONLINE
@@ -145,8 +145,9 @@ F o Enter ............. usar el arma que agarraste
 H ..................... bocina (tus amigos la escuchan)
 1 a 6 ................. chat rápido: ¡Vamos!, ¡Buena!, Perdón, Jajaja, GG,
                         ¡Revancha! (en el celular, el botón 💬)
-R ..................... reaparecer sobre la pista (si quedás trabado, dado
-                        vuelta o afuera del mapa; si te caés, vuelve solo)
+R ..................... reaparecer sobre la pista, en un lugar firme y
+                        despejado (si quedás trabado, dado vuelta o afuera
+                        del mapa; si te caés o te das vuelta, vuelve solo)
 C ..................... cambiar cámara (cerca / lejos / paragolpes)
 M ..................... prender o apagar el sonido
 Esc ................... pausa (en los menús: volver)
